@@ -87,6 +87,17 @@ One-time find/replace on CSS entries only:
 Then add repeat-rendered components to `linkEntries`. Measure before/after with Lighthouse
 (or [unlighthouse](https://unlighthouse.dev)) on home, collection, and product pages.
 
+## Releasing
+
+Publishing is automated via GitHub Actions (npm Trusted Publishing — no tokens):
+
+```bash
+npm version patch   # or minor / major — bumps package.json, commits, tags vX.Y.Z
+git push --follow-tags
+```
+
+The `v*` tag triggers `.github/workflows/publish.yml`, which runs build + coverage (via `prepublishOnly`) and publishes with provenance.
+
 ## Limitations
 
 - Only `@/` and `~/` entry alias forms are supported.

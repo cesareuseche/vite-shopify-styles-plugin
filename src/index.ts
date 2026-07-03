@@ -12,8 +12,14 @@ import { normalizeOptions, type Options } from './options.js'
 
 export type { Options } from './options.js'
 
-/** Shopify's documented cap for inline_asset_content (verified in Task 8 against shopify.dev docs). */
-const INLINE_SIZE_LIMIT = 100_000
+/**
+ * Shopify's documented cap for inline_asset_content: "The asset size must be less than 15KB
+ * to be inlined." (verified 2026-07-03 against
+ * https://shopify.dev/docs/api/liquid/filters/inline_asset_content). Expressed here in decimal
+ * bytes (1 KB = 1000 B), consistent with Shopify's own threshold_in_bytes convention used by
+ * theme-check's asset-size rules.
+ */
+const INLINE_SIZE_LIMIT = 15_000
 
 const LIQUID_DIRS = ['layout', 'sections', 'snippets', 'blocks', 'templates']
 

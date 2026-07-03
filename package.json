@@ -4,6 +4,12 @@
   "description": "Vite plugin for Shopify themes: render each section/snippet's built CSS as an inline <style> tag via inline_asset_content",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cesareuseche/vite-shopify-styles-plugin.git"
+  },
+  "homepage": "https://github.com/cesareuseche/vite-shopify-styles-plugin#readme",
+  "bugs": "https://github.com/cesareuseche/vite-shopify-styles-plugin/issues",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,7 +18,7 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "LICENSE", "README.md"],
   "engines": { "node": ">=20" },
   "keywords": ["vite-plugin", "shopify", "shopify-theme", "css", "inline-styles"],
   "scripts": {

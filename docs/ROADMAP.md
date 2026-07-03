@@ -33,6 +33,8 @@ Plan: `docs/superpowers/plans/2026-07-03-inline-styles-plugin.md`
 | Theme blocks CSS convention (`src/blocks/*.css`) | Lazer themes adopt Shopify theme blocks with their own CSS files (orphan scan already reads `blocks/`). |
 | `media` attribute support (breakpoint/print-scoped output) | A component genuinely ships conditional CSS. |
 | Automatic repeat detection | Probably never — Liquid render graphs are dynamic and unknowable at build time. Revisit only if maintaining `linkEntries` becomes a real burden. |
+| Hard error (or `strict` option) when an inline entry exceeds 15KB | Shopify silently refuses to inline over-cap assets — a warning can be missed while production styles break; promote once a real theme hits it. |
+| Build warning when a manifest `file` contains `/` (non-flat assetFileNames) | Standalone use without vite-plugin-shopify's flat asset output would emit asset paths `asset_url` cannot serve. |
 
 ## Non-goals (permanent, from the spec)
 

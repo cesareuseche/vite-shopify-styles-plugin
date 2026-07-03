@@ -47,4 +47,9 @@ describe('findOversized', () => {
     ]
     expect(findOversized(sized, 100_000)).toEqual([{ ...badge, bytes: 200_000 }])
   })
+
+  it('flags an inline entry exactly at the limit (Shopify requires strictly less than the cap)', () => {
+    const sized: EntrySize[] = [{ ...badge, bytes: 100_000 }]
+    expect(findOversized(sized, 100_000)).toEqual([{ ...badge, bytes: 100_000 }])
+  })
 })

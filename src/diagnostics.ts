@@ -28,5 +28,5 @@ export function findOrphans(entries: CssEntry[], liquidContents: string[]): CssE
 }
 
 export function findOversized(entries: EntrySize[], limit: number): EntrySize[] {
-  return entries.filter((entry) => !entry.link && entry.bytes > limit)
+  return entries.filter((entry) => !entry.link && entry.bytes >= limit)
 }

@@ -73,7 +73,7 @@ JS entries keep using `vite-tag`; this plugin only handles CSS.
 Every build prints a per-entry report (asset, minified size, inline/link) sorted by size, and warns when:
 
 - a CSS entrypoint is built but never referenced via `render 'vite-style'` in any liquid file (orphan);
-- an inlined asset exceeds Shopify's `inline_asset_content` size cap.
+- an inlined asset exceeds Shopify's `inline_asset_content` size cap (15KB).
 
 ## Migrating an existing vite-plugin-shopify theme
 

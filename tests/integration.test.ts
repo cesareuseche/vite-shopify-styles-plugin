@@ -30,6 +30,7 @@ beforeAll(async () => {
         input: [
           path.join(fixture, 'src/snippets/l-badge.css'),
           path.join(fixture, 'src/snippets/l-button.css'),
+          path.join(fixture, 'src/snippets/l-oversize.css'),
           path.join(fixture, 'src/sections/section.hero.css'),
         ],
         output: { assetFileNames: '[name]-[hash][extname]' },
@@ -68,5 +69,13 @@ describe('vite build integration', () => {
     const orphanWarnings = warnings.filter((w) => w.includes('never rendered'))
     expect(orphanWarnings).toHaveLength(1)
     expect(orphanWarnings[0]).toContain('src/sections/section.hero.css')
+  })
+
+  it('warns exactly once about the oversized l-oversize.css exceeding the inline_asset_content limit', () => {
+    const oversizeWarnings = warnings.filter((w) =>
+      /above the inline_asset_content limit/.test(w),
+    )
+    expect(oversizeWarnings).toHaveLength(1)
+    expect(oversizeWarnings[0]).toContain('l-oversize')
   })
 })

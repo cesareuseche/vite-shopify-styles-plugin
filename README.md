@@ -1,5 +1,7 @@
 # vite-plugin-shopify-inline-styles
 
+[![npm](https://img.shields.io/npm/v/vite-plugin-shopify-inline-styles)](https://www.npmjs.com/package/vite-plugin-shopify-inline-styles)
+
 Renders each Shopify section/snippet's built CSS as an inline `<style>` tag instead of a
 render-blocking `<link>`, using Shopify's server-side
 [`inline_asset_content`](https://shopify.dev/docs/api/liquid/filters/inline_asset_content) filter.

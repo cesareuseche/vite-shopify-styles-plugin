@@ -20,5 +20,16 @@ jobs:
       # Trusted Publishing requires npm >= 11.5.1
       - run: npm install -g npm@latest
       - run: npm ci
+      # Idempotency guard: re-pushed or backfilled tags must not fail on an already-published version
+      - name: Check if version is already on the registry
+        id: check
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "$PKG@$VER already published — skipping"
+          fi
       # prepublishOnly runs build + coverage; provenance is attached automatically via OIDC
       - run: npm publish
+        if: steps.check.outputs.published != 'true'

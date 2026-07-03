@@ -95,9 +95,14 @@ Migration is a one-time find/replace of `render 'vite-tag'` → `render 'vite-st
 - **Literal `</style>` inside CSS content** would terminate the block early — documented limitation; does not occur in real component CSS.
 - **Caching trade-off** (documented in README): inlined CSS re-ships with every page view instead of hitting the browser cache; `linkEntries` is the knob when caching matters more than request elimination.
 
+## Build diagnostics
+
+- **Build report** — after generating the snippet, print a table to the build log: entry, output asset, minified size, decision (`inline` | `link`). Sorted by size descending, so ballooning component CSS is visible immediately.
+- **Orphan warning** — scan the theme's `.liquid` files (excluding the generated snippet) for each CSS entry's alias strings; if an entry is referenced nowhere, log a warning (`built but never rendered via 'vite-style'`). Non-blocking — dynamically-constructed entry strings are a documented false-positive case.
+
 ## Testing
 
-- **Unit** (vitest): core pure function `generateSnippet(manifestEntries, options) → string` — inline branch, link opt-out by basename, link opt-out by full alias path, both alias forms in `when`, unknown-entry fallback block, deterministic ordering, dev-mode delegation content.
+- **Unit** (vitest): core pure function `generateSnippet(manifestEntries, options) → string` — inline branch, link opt-out by basename, link opt-out by full alias path, both alias forms in `when`, unknown-entry fallback block, deterministic ordering, dev-mode delegation content. Plus: build-report formatting and orphan detection (referenced vs unreferenced entries).
 - **Integration**: run a real `vite build` on a fixture mini-theme (2 CSS entries, one opted out) and assert the generated snippet references the hashed assets correctly and assets exist.
 - Coverage target: 80%+.
 

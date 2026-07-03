@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { generateDevSnippet, extractCssEntries, matchesLinkEntry } from '../src/generate.js'
+import { generateDevSnippet, extractCssEntries, matchesLinkEntry, generateBuildSnippet, type CssEntry } from '../src/generate.js'
 import { normalizeOptions } from '../src/options.js'
 
 describe('generateDevSnippet', () => {
@@ -56,5 +56,49 @@ describe('matchesLinkEntry', () => {
   it('returns false when nothing matches', () => {
     expect(matchesLinkEntry('snippets/l-button.css', ['l-badge.css', '@/sections/x.css'])).toBe(false)
     expect(matchesLinkEntry('snippets/l-button.css', [])).toBe(false)
+  })
+})
+
+describe('generateBuildSnippet', () => {
+  const entries: CssEntry[] = [
+    { key: 'src/sections/section.hero.scss', aliasPath: 'sections/section.hero.scss', file: 'section.hero-B2fK.css', link: false },
+    { key: 'src/snippets/l-badge.css', aliasPath: 'snippets/l-badge.css', file: 'l-badge-Xk3D.css', link: false },
+    { key: 'src/snippets/l-button.css', aliasPath: 'snippets/l-button.css', file: 'l-button-D4k2.css', link: true },
+  ]
+
+  it('emits a when-branch with both alias forms per entry', () => {
+    const snippet = generateBuildSnippet(entries)
+    expect(snippet).toContain("when '@/snippets/l-badge.css' or '~/snippets/l-badge.css'")
+    expect(snippet).toContain("assign vs_asset = 'l-badge-Xk3D.css'")
+  })
+
+  it('marks link entries with vs_link and leaves inline entries unmarked', () => {
+    const snippet = generateBuildSnippet(entries)
+    const buttonBranch = snippet.split("when '@/snippets/l-button.css'")[1].split('when')[0] ?? ''
+    const badgeBranch = snippet.split("when '@/snippets/l-badge.css'")[1].split('when')[0] ?? ''
+    expect(buttonBranch).toContain('assign vs_link = true')
+    expect(badgeBranch).not.toContain('vs_link')
+  })
+
+  it('renders inline style, link fallback, and unknown-entry branches', () => {
+    const snippet = generateBuildSnippet(entries)
+    expect(snippet).toContain(
+      '<style data-vite-style="{{ entry }}">{{ vs_asset | inline_asset_content }}</style>',
+    )
+    expect(snippet).toContain('{{ vs_asset | asset_url | stylesheet_tag }}')
+    expect(snippet).toContain("<!-- vite-style: unknown entry '{{ entry }}' -->")
+  })
+
+  it('preserves entry order (already sorted upstream) and is deterministic', () => {
+    const first = generateBuildSnippet(entries)
+    const second = generateBuildSnippet(entries)
+    expect(first).toBe(second)
+    expect(first.indexOf('section.hero')).toBeLessThan(first.indexOf('l-badge'))
+  })
+
+  it('emits a comment-only snippet when there are no CSS entries', () => {
+    const snippet = generateBuildSnippet([])
+    expect(snippet).toContain('<!-- vite-style: no CSS entrypoints in build -->')
+    expect(snippet).not.toContain('case entry')
   })
 })

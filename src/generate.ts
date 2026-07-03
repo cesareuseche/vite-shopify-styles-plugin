@@ -56,3 +56,37 @@ export function matchesLinkEntry(aliasPath: string, linkEntries: string[]): bool
     return cleaned === aliasPath || cleaned === basename
   })
 }
+
+export function generateBuildSnippet(entries: CssEntry[]): string {
+  if (entries.length === 0) {
+    return `${GENERATED_HEADER}
+<!-- vite-style: no CSS entrypoints in build -->
+`
+  }
+
+  const branches = entries
+    .map((entry) => {
+      const lines = [
+        `    when '@/${entry.aliasPath}' or '~/${entry.aliasPath}'`,
+        `      assign vs_asset = '${entry.file}'`,
+      ]
+      if (entry.link) lines.push('      assign vs_link = true')
+      return lines.join('\n')
+    })
+    .join('\n')
+
+  return `${GENERATED_HEADER}
+{%- liquid
+  case entry
+${branches}
+  endcase
+-%}
+{%- if vs_asset == blank -%}
+  <!-- vite-style: unknown entry '{{ entry }}' -->
+{%- elsif vs_link -%}
+  {{ vs_asset | asset_url | stylesheet_tag }}
+{%- else -%}
+  <style data-vite-style="{{ entry }}">{{ vs_asset | inline_asset_content }}</style>
+{%- endif -%}
+`
+}

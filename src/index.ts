@@ -79,7 +79,14 @@ function readManifest(config: ResolvedConfig): Record<string, ManifestChunk> {
     config.build.outDir,
     manifestFileName(config.build.manifest),
   )
-  return JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, ManifestChunk>
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, ManifestChunk>
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(
+      `[vite-plugin-shopify-inline-styles] manifest not found or unreadable at '${file}' — ensure the build ran with build.manifest enabled. ${reason}`,
+    )
+  }
 }
 
 function writeSnippet(filePath: string, content: string): void {

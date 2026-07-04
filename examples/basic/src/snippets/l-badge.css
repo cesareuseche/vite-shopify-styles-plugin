@@ -1,0 +1,8 @@
+.l-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-size: 0.75rem;
+}

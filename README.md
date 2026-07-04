@@ -62,6 +62,8 @@ In your section or snippet:
 
 JS entries keep using `vite-tag`; this plugin only handles CSS.
 
+A runnable end-to-end setup lives in [`examples/basic`](examples/basic).
+
 ## Options
 
 | Option | Default | Description |

@@ -1,6 +1,7 @@
 # vite-plugin-shopify-inline-styles
 
 [![npm](https://img.shields.io/npm/v/vite-plugin-shopify-inline-styles)](https://www.npmjs.com/package/vite-plugin-shopify-inline-styles)
+[![CI](https://github.com/cesareuseche/vite-shopify-styles-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/cesareuseche/vite-shopify-styles-plugin/actions/workflows/ci.yml)
 
 Renders each Shopify section/snippet's built CSS as an inline `<style>` tag instead of a
 render-blocking `<link>`, using Shopify's server-side

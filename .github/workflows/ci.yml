@@ -8,11 +8,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+        vite: [5, 6, 7]
+    name: node ${{ matrix.node }} / vite ${{ matrix.vite }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
       - run: npm ci
+      - run: npm i --no-save vite@${{ matrix.vite }}
       - run: npm run build
       - run: npm run test:coverage

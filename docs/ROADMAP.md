@@ -13,14 +13,6 @@ Principle: features land when a real theme hits the ceiling, not before. Every b
 
 Plan: `docs/superpowers/plans/2026-07-03-inline-styles-plugin.md`
 
-## v0.2 — First adoption (holts-theme)
-
-- Migrate holts CSS render calls: `{% render 'vite-tag', ... %}` → `{% render 'vite-style', ... %}` (CSS entries only).
-- Populate `linkEntries` from real usage: `l-button.css`, `l-product-card.css`, and any other snippet rendered in loops (check collection/search grids).
-- Measure with unlighthouse (already configured in holts) on home, collection, and product pages — record before/after FCP, LCP, and the render-blocking-resources audit here.
-- Publish `0.1.x` to npm.
-- CI: install → `npm run build` → `npm run test:coverage` on every PR.
-
 ## Backlog — add when the trigger fires
 
 | Feature | Trigger |

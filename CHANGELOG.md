@@ -5,10 +5,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-04
+
 ### Added
 
 - Dev-server startup log explaining that dev mode delegates to `vite-tag` and
-  inline `<style>` tags are only generated on build.
+  inline `<style>` tags are only generated on build, plus a README FAQ entry
+  for the same confusion.
+- Real-world before/after case study in the README: production theme with 44
+  CSS entrypoints, desktop Lighthouse, with report screenshots.
+- Runnable example theme in `examples/basic` (vite-plugin-shopify companion
+  setup), built on every CI run.
+- This CHANGELOG, shipped in the npm tarball.
+
+### Changed
+
+- CI now tests Node 20/22 × Vite 5/6/7.
+- Broader npm keywords for discoverability.
 
 ## [0.1.0] - 2026-07-03
 

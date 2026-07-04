@@ -25,6 +25,33 @@ describe('shopifyInlineStyles', () => {
   })
 })
 
+describe('configureServer', () => {
+  it('writes the dev snippet and logs that inlining only happens on build', () => {
+    const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-dev-hint-'))
+    const infos: string[] = []
+
+    const plugin = shopifyInlineStyles({ themeRoot })
+    const configResolved = plugin.configResolved as (config: unknown) => void
+    const configureServer = plugin.configureServer as () => void
+
+    configResolved({
+      command: 'serve',
+      root: themeRoot,
+      build: { outDir: 'assets', manifest: true },
+      logger: { info: (msg: string) => infos.push(msg), warn: () => {}, error: () => {} },
+    } as unknown as ResolvedConfig)
+
+    configureServer()
+
+    const snippet = fs.readFileSync(
+      path.join(themeRoot, 'snippets', 'vite-style.liquid'),
+      'utf-8',
+    )
+    expect(snippet).toContain("render 'vite-tag'")
+    expect(infos.join('\n')).toMatch(/dev.*inline <style>.*build/s)
+  })
+})
+
 describe('closeBundle', () => {
   it('throws a prefixed, actionable error when the manifest file is missing', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-missing-manifest-'))

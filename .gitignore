@@ -3,3 +3,7 @@ dist/
 coverage/
 tests/fixture/assets/
 tests/fixture/snippets/vite-style.liquid
+examples/basic/package-lock.json
+examples/basic/assets/
+examples/basic/snippets/vite-style.liquid
+examples/basic/snippets/vite-tag.liquid

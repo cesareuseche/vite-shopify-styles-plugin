@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ shop.name }}</title>
+    {{ content_for_header }}
+    {% render 'vite-tag' with '@/entrypoints/theme.js' %}
+  </head>
+  <body>
+    {{ content_for_layout }}
+  </body>
+</html>

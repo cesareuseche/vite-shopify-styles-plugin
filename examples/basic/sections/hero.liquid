@@ -1,0 +1,13 @@
+{% render 'vite-style', entry: '@/sections/section.hero.css' %}
+<section class="section-hero">
+  <h1>{{ section.settings.heading | default: 'Inline styles demo' }}</h1>
+  {% render 'l-badge', label: 'New' %}
+</section>
+
+{% schema %}
+{
+  "name": "Hero",
+  "settings": [{ "type": "text", "id": "heading", "label": "Heading" }],
+  "presets": [{ "name": "Hero" }]
+}
+{% endschema %}

@@ -39,6 +39,9 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
 
     configureServer() {
       writeSnippet(snippetPath(), generateDevSnippet())
+      config.logger.info(
+        `[vite-style] dev: '${options.snippetName}' delegates to vite-tag, so CSS loads from the dev server — inline <style> tags are generated on build`,
+      )
     },
 
     closeBundle() {

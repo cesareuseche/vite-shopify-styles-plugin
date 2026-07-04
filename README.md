@@ -28,7 +28,7 @@ plugin — the two theme versions differ only by the migration from `<link>` tag
 | Page       | Render-blocking stylesheets | Stylesheet requests | FCP               | LCP             |
 | ---------- | --------------------------- | ------------------- | ----------------- | --------------- |
 | Home       | 6 → **3**                   | 20 → **8**          | 1.02 s → 0.98 s   | 1.06 s → 1.02 s |
-| Collection | 6 → **3**                   | 21 → **10**         | 2.42 s → 2.42 s   | 2.57 s → 2.89 s |
+| Collection | 6 → **3**                   | 21 → **10**         | 2.42 s → 2.42 s   | 2.57 s → 2.32 s |
 | Product    | 10 → **3**                  | 29 → **11**         | 1.02 s → **0.66 s** | 1.30 s → 1.18 s |
 
 Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme, same

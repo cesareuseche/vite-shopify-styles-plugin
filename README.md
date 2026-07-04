@@ -103,6 +103,14 @@ git push --follow-tags
 
 The `v*` tag triggers `.github/workflows/publish.yml`, which runs build + coverage (via `prepublishOnly`) and publishes with provenance.
 
+## FAQ
+
+**I added `render 'vite-style'` but the CSS is not inlined.** You're almost
+certainly looking at dev mode: there the snippet intentionally delegates to
+`vite-tag`, so CSS loads from the Vite dev server (keeping HMR working) and a
+startup log says so. Inline `<style>` tags exist only in the built theme — run
+a production build and inspect the generated `snippets/vite-style.liquid`.
+
 ## Limitations
 
 - Only `@/` and `~/` entry alias forms are supported.

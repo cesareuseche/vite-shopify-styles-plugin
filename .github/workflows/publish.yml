@@ -31,5 +31,10 @@ jobs:
             echo "$PKG@$VER already published — skipping"
           fi
       # prepublishOnly runs build + coverage; provenance is attached automatically via OIDC
-      - run: npm publish
+      - name: Publish to npm
         if: steps.check.outputs.published != 'true'
+        run: |
+          # setup-node's registry-url sets NODE_AUTH_TOKEN to an empty placeholder, which
+          # blocks OIDC — clear it so npm uses Trusted Publishing instead.
+          unset NODE_AUTH_TOKEN
+          npm publish --access public --provenance

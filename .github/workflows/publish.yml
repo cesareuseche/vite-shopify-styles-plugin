@@ -16,10 +16,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: 'https://registry.npmjs.org'
       # Trusted Publishing requires npm >= 11.5.1
       - run: npm install -g npm@latest
       - run: npm ci
+      - run: npm run build
+      - run: npm run test:coverage
       # Idempotency guard: re-pushed or backfilled tags must not fail on an already-published version
       - name: Check if version is already on the registry
         id: check
@@ -30,11 +31,6 @@ jobs:
             echo "published=true" >> "$GITHUB_OUTPUT"
             echo "$PKG@$VER already published — skipping"
           fi
-      # prepublishOnly runs build + coverage; provenance is attached automatically via OIDC
       - name: Publish to npm
         if: steps.check.outputs.published != 'true'
-        run: |
-          # setup-node's registry-url sets NODE_AUTH_TOKEN to an empty placeholder, which
-          # blocks OIDC — clear it so npm uses Trusted Publishing instead.
-          unset NODE_AUTH_TOKEN
-          npm publish --access public --provenance
+        run: npm publish --access public --provenance --ignore-scripts

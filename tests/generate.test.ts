@@ -31,12 +31,12 @@ describe('extractCssEntries', () => {
     ])
   })
 
-  it('maps aliasPath, output file, and link decision', () => {
+  it('maps aliasPath, output files, and link decision', () => {
     const entries = extractCssEntries(manifest, options)
     expect(entries[1]).toEqual({
       key: 'src/snippets/l-badge.css',
       aliasPath: 'snippets/l-badge.css',
-      file: 'l-badge-Xk3D.css',
+      files: ['l-badge-Xk3D.css'],
       link: false,
     })
     expect(entries[2].link).toBe(true)
@@ -61,15 +61,20 @@ describe('matchesLinkEntry', () => {
 
 describe('generateBuildSnippet', () => {
   const entries: CssEntry[] = [
-    { key: 'src/sections/section.hero.scss', aliasPath: 'sections/section.hero.scss', file: 'section.hero-B2fK.css', link: false },
-    { key: 'src/snippets/l-badge.css', aliasPath: 'snippets/l-badge.css', file: 'l-badge-Xk3D.css', link: false },
-    { key: 'src/snippets/l-button.css', aliasPath: 'snippets/l-button.css', file: 'l-button-D4k2.css', link: true },
+    { key: 'src/sections/section.hero.scss', aliasPath: 'sections/section.hero.scss', files: ['section.hero-B2fK-p1.css', 'section.hero-B2fK-p2.css'], link: false },
+    { key: 'src/snippets/l-badge.css', aliasPath: 'snippets/l-badge.css', files: ['l-badge-Xk3D.css'], link: false },
+    { key: 'src/snippets/l-button.css', aliasPath: 'snippets/l-button.css', files: ['l-button-D4k2.css'], link: true },
   ]
 
   it('emits a when-branch with both alias forms per entry', () => {
     const snippet = generateBuildSnippet(entries)
     expect(snippet).toContain("when '@/snippets/l-badge.css' or '~/snippets/l-badge.css'")
     expect(snippet).toContain("assign vs_asset = 'l-badge-Xk3D.css'")
+  })
+
+  it('joins multi-part entries into a comma-separated assign', () => {
+    const snippet = generateBuildSnippet(entries)
+    expect(snippet).toContain("assign vs_asset = 'section.hero-B2fK-p1.css,section.hero-B2fK-p2.css'")
   })
 
   it('marks link entries with vs_link and leaves inline entries unmarked', () => {
@@ -80,11 +85,17 @@ describe('generateBuildSnippet', () => {
     expect(badgeBranch).not.toContain('vs_link')
   })
 
-  it('renders inline style, link fallback, and unknown-entry branches', () => {
+  it('renders inline parts through one split-and-loop path', () => {
     const snippet = generateBuildSnippet(entries)
+    expect(snippet).toContain("assign vs_parts = vs_asset | split: ','")
+    expect(snippet).toContain('{%- for vs_part in vs_parts -%}')
     expect(snippet).toContain(
-      '<style data-vite-style="{{ entry }}">{{ vs_asset | inline_asset_content }}</style>',
+      '<style data-vite-style="{{ entry }}">{{ vs_part | inline_asset_content }}</style>',
     )
+  })
+
+  it('renders link fallback and unknown-entry branches', () => {
+    const snippet = generateBuildSnippet(entries)
     expect(snippet).toContain('{{ vs_asset | asset_url | stylesheet_tag }}')
     expect(snippet).toContain("<!-- vite-style: unknown entry '{{ entry }}' -->")
   })

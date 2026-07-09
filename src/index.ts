@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Plugin, ResolvedConfig } from 'vite'
-import { findOrphans, findOversized, formatReport, type EntrySize } from './diagnostics.js'
+import type { Logger, Plugin, ResolvedConfig } from 'vite'
+import { findOrphans, formatReport, type EntrySize } from './diagnostics.js'
 import {
   extractCssEntries,
   generateBuildSnippet,
@@ -9,6 +9,7 @@ import {
   type ManifestChunk,
 } from './generate.js'
 import { normalizeOptions, type Options } from './options.js'
+import { splitCss } from './split.js'
 
 export type { Options } from './options.js'
 
@@ -48,25 +49,22 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
       if (config.command !== 'build') return
 
       const manifest = readManifest(config)
-      const entries = extractCssEntries(manifest, options)
-      writeSnippet(snippetPath(), generateBuildSnippet(entries))
-
       const outDir = path.resolve(config.root, config.build.outDir)
-      const sized: EntrySize[] = entries.map((entry) => ({
-        ...entry,
-        bytes: statSizeSafe(path.join(outDir, entry.file)),
-      }))
-      config.logger.info(formatReport(sized))
+      const entries = extractCssEntries(manifest, options).map((entry) => {
+        const sized: EntrySize = {
+          ...entry,
+          bytes: statSizeSafe(path.join(outDir, entry.files[0])),
+        }
+        return autoSplit(sized, outDir, config.logger)
+      })
+
+      writeSnippet(snippetPath(), generateBuildSnippet(entries))
+      config.logger.info(formatReport(entries))
 
       const liquidContents = readLiquidFiles(options.themeRoot, snippetPath())
       for (const orphan of findOrphans(entries, liquidContents)) {
         config.logger.warn(
           `[vite-style] '${orphan.key}' was built but is never rendered via '${options.snippetName}'`,
-        )
-      }
-      for (const big of findOversized(sized, INLINE_SIZE_LIMIT)) {
-        config.logger.warn(
-          `[vite-style] '${big.key}' is ${big.bytes} bytes, above the inline_asset_content limit of ${INLINE_SIZE_LIMIT}; Shopify may refuse to inline it. Consider adding it to linkEntries.`,
         )
       }
     },
@@ -96,6 +94,32 @@ function readManifest(config: ResolvedConfig): Record<string, ManifestChunk> {
       `[vite-plugin-shopify-inline-styles] manifest not found or unreadable at '${file}' — ensure the build ran with build.manifest enabled. ${reason}`,
     )
   }
+}
+
+/**
+ * Splits an oversized inline entry's built CSS into ≤15KB part files written next
+ * to the original (which is kept — other references to it keep working). Entries
+ * that cannot be split (an atomic rule alone exceeds the cap) fall back to <link>
+ * so styles never silently disappear.
+ */
+function autoSplit(entry: EntrySize, outDir: string, logger: Logger): EntrySize {
+  if (entry.link || entry.bytes < INLINE_SIZE_LIMIT) return entry
+
+  const source = entry.files[0]
+  const parts = splitCss(fs.readFileSync(path.join(outDir, source), 'utf-8'), INLINE_SIZE_LIMIT)
+  if (!parts || parts.length < 2) {
+    logger.warn(
+      `[vite-style] '${entry.key}' is ${entry.bytes} bytes, above the inline_asset_content limit of ${INLINE_SIZE_LIMIT}, and cannot be split; falling back to <link rel="stylesheet">`,
+    )
+    return { ...entry, link: true }
+  }
+
+  const files = parts.map((part, i) => {
+    const name = source.replace(/\.css$/, `-p${i + 1}.css`)
+    fs.writeFileSync(path.join(outDir, name), part)
+    return name
+  })
+  return { ...entry, files }
 }
 
 function writeSnippet(filePath: string, content: string): void {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { findOrphans, findOversized, formatReport, type EntrySize } from '../src/diagnostics.js'
+import { findOrphans, formatReport, type EntrySize } from '../src/diagnostics.js'
 import type { CssEntry } from '../src/generate.js'
 
-const badge: CssEntry = { key: 'src/snippets/l-badge.css', aliasPath: 'snippets/l-badge.css', file: 'l-badge-X.css', link: false }
-const button: CssEntry = { key: 'src/snippets/l-button.css', aliasPath: 'snippets/l-button.css', file: 'l-button-D.css', link: true }
-const hero: CssEntry = { key: 'src/sections/section.hero.css', aliasPath: 'sections/section.hero.css', file: 'section.hero-B.css', link: false }
+const badge: CssEntry = { key: 'src/snippets/l-badge.css', aliasPath: 'snippets/l-badge.css', files: ['l-badge-X.css'], link: false }
+const button: CssEntry = { key: 'src/snippets/l-button.css', aliasPath: 'snippets/l-button.css', files: ['l-button-D.css'], link: true }
+const hero: CssEntry = { key: 'src/sections/section.hero.css', aliasPath: 'sections/section.hero.css', files: ['section.hero-B.css'], link: false }
 
 describe('formatReport', () => {
   it('lists entries sorted by size descending with KB and decision', () => {
@@ -21,6 +21,17 @@ describe('formatReport', () => {
     expect(lines[2]).toContain('1.0 KB')
     expect(lines[2]).toContain('inline')
   })
+
+  it('shows the part count for auto-split entries', () => {
+    const split: EntrySize = {
+      ...hero,
+      files: ['section.hero-B-p1.css', 'section.hero-B-p2.css'],
+      bytes: 21344,
+    }
+    const report = formatReport([split])
+    expect(report).toContain('inline (2 parts)')
+    expect(report).toContain('20.8 KB')
+  })
 })
 
 describe('findOrphans', () => {
@@ -35,21 +46,5 @@ describe('findOrphans', () => {
   it('returns nothing when everything is referenced', () => {
     const liquid = ["'@/snippets/l-badge.css'"]
     expect(findOrphans([badge], liquid)).toEqual([])
-  })
-})
-
-describe('findOversized', () => {
-  it('flags inline entries above the limit, exempts link entries', () => {
-    const sized: EntrySize[] = [
-      { ...badge, bytes: 200_000 },
-      { ...button, bytes: 200_000 },
-      { ...hero, bytes: 100 },
-    ]
-    expect(findOversized(sized, 100_000)).toEqual([{ ...badge, bytes: 200_000 }])
-  })
-
-  it('flags an inline entry exactly at the limit (Shopify requires strictly less than the cap)', () => {
-    const sized: EntrySize[] = [{ ...badge, bytes: 100_000 }]
-    expect(findOversized(sized, 100_000)).toEqual([{ ...badge, bytes: 100_000 }])
   })
 })

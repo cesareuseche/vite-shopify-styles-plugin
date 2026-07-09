@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+
+- CSS entries above Shopify's 15KB `inline_asset_content` cap are now split
+  automatically at build time into ordered part files rendered as consecutive
+  inline `<style>` tags — no config, cascade-equivalent. Conditional groups
+  (`@media`, `@supports`, `@container`, `@layer`) are split inside their bodies
+  and re-wrapped; a leading `@charset` is duplicated into every part.
+- Entries that cannot be split (a single atomic block alone exceeds the cap)
+  fall back to `<link rel="stylesheet">` with a build warning, so styles never
+  silently disappear. The old oversize warning is replaced by this fallback.
+- The build report shows the part count for split entries.
+
 ## [0.2.0] - 2026-07-04
 
 ### Added

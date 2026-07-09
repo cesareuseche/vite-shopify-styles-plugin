@@ -84,6 +84,17 @@ In your section or snippet:
 
 JS entries keep using `vite-tag`; this plugin only handles CSS.
 
+### Oversized entries are split automatically
+
+Shopify's `inline_asset_content` refuses assets of 15KB or more. Entries over the cap are
+split at build time into ordered part files (`name-p1.css`, `name-p2.css`, …), each under the
+cap, rendered as consecutive `<style>` tags — same cascade order, zero config. Oversized
+conditional groups (`@media`, `@supports`, `@container`, `@layer`) are split inside their
+bodies and re-wrapped with their prelude. If a single atomic block alone exceeds the cap
+(e.g. a huge data-URI declaration), the whole entry falls back to `<link>` with a build
+warning — styles never silently disappear. `linkEntries` still opts an entry out entirely
+and is never split.
+
 A runnable end-to-end setup lives in [`examples/basic`](examples/basic).
 
 ## Options
@@ -97,10 +108,10 @@ A runnable end-to-end setup lives in [`examples/basic`](examples/basic).
 
 ## Build diagnostics
 
-Every build prints a per-entry report (asset, minified size, inline/link) sorted by size, and warns when:
+Every build prints a per-entry report (asset, minified size, inline/link, part count) sorted by size, and warns when:
 
 - a CSS entrypoint is built but never referenced via `render 'vite-style'` in any liquid file (orphan);
-- an inlined asset exceeds Shopify's `inline_asset_content` size cap (15KB).
+- an oversized entry cannot be auto-split (an atomic block alone exceeds the 15KB cap) and falls back to `<link>`.
 
 ## Migrating an existing vite-plugin-shopify theme
 

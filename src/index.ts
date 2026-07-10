@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Logger, Plugin, ResolvedConfig } from 'vite'
-import { findOrphans, formatReport, type EntrySize } from './diagnostics.js'
+import { findOrphans, findVendorImports, formatReport, type EntrySize } from './diagnostics.js'
 import {
   extractCssEntries,
   generateBuildSnippet,
@@ -65,6 +65,17 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
       for (const orphan of findOrphans(entries, liquidContents)) {
         config.logger.warn(
           `[vite-style] '${orphan.key}' was built but is never rendered via '${options.snippetName}'`,
+        )
+      }
+
+      for (const entry of entries) {
+        if (entry.link) continue
+        const vendors = findVendorImports(readFileSafe(path.resolve(config.root, entry.key)))
+        if (vendors.length === 0) continue
+        config.logger.warn(
+          `[vite-style] '${entry.key}' inlines vendor CSS from ${vendors
+            .map((spec) => `'${spec}'`)
+            .join(', ')} — vendor styles re-ship on every page view; consider a dedicated entry in linkEntries`,
         )
       }
     },
@@ -132,6 +143,14 @@ function statSizeSafe(filePath: string): number {
     return fs.statSync(filePath).size
   } catch {
     return 0
+  }
+}
+
+function readFileSafe(filePath: string): string {
+  try {
+    return fs.readFileSync(filePath, 'utf-8')
+  } catch {
+    return ''
   }
 }
 

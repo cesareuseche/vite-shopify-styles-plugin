@@ -77,3 +77,61 @@ describe('closeBundle', () => {
     expect(() => closeBundle()).toThrow(expectedManifestPath)
   })
 })
+
+describe('closeBundle vendor import warning', () => {
+  function runBuild(opts: { linkEntries?: string[]; source: string }): string[] {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-vendor-'))
+    const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-vendor-theme-'))
+    const warnings: string[] = []
+
+    fs.mkdirSync(path.join(root, 'src/snippets'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'src/snippets/l-carousel.css'), opts.source)
+    fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'assets/l-carousel-X.css'), '.swiper{display:flex}')
+    fs.writeFileSync(
+      path.join(root, 'assets/manifest.json'),
+      JSON.stringify({
+        'src/snippets/l-carousel.css': {
+          file: 'l-carousel-X.css',
+          src: 'src/snippets/l-carousel.css',
+          isEntry: true,
+        },
+      }),
+    )
+
+    const plugin = shopifyInlineStyles({ themeRoot, linkEntries: opts.linkEntries })
+    const configResolved = plugin.configResolved as (config: unknown) => void
+    const closeBundle = plugin.closeBundle as () => void
+
+    configResolved({
+      command: 'build',
+      root,
+      build: { outDir: 'assets', manifest: 'manifest.json' },
+      logger: { info: () => {}, warn: (msg: string) => warnings.push(msg), error: () => {} },
+    } as unknown as ResolvedConfig)
+
+    closeBundle()
+    return warnings.filter((w) => w.includes('vendor'))
+  }
+
+  it('warns when an inline entry has a bare vendor @import', () => {
+    const vendorWarnings = runBuild({ source: "@import 'swiper/css';\n.s { color: red }" })
+    expect(vendorWarnings).toHaveLength(1)
+    expect(vendorWarnings[0]).toContain("'src/snippets/l-carousel.css'")
+    expect(vendorWarnings[0]).toContain("'swiper/css'")
+    expect(vendorWarnings[0]).toContain('linkEntries')
+  })
+
+  it('does not warn when the same entry is in linkEntries', () => {
+    const vendorWarnings = runBuild({
+      linkEntries: ['l-carousel.css'],
+      source: "@import 'swiper/css';\n.s { color: red }",
+    })
+    expect(vendorWarnings).toEqual([])
+  })
+
+  it('does not warn for local and alias imports', () => {
+    const vendorWarnings = runBuild({ source: "@import './base.css';\n@import '@/snippets/x.css';" })
+    expect(vendorWarnings).toEqual([])
+  })
+})

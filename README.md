@@ -48,36 +48,25 @@ and rendered once or twice per page; it's a loss for large, repeated CSS.
 
 ## Real-world results
 
-A production Shopify theme (44 component CSS entrypoints), measured with and without the plugin.
-The two theme versions are identical except for the migration from `<link>` tags to
-`render 'vite-style'`:
+The same production Shopify theme, measured **without** the plugin and **with** it — same
+store, same content, same day. The only difference is CSS delivery:
 
-| Page       | Render-blocking stylesheets | Stylesheet requests | FCP                 | LCP             |
-| ---------- | --------------------------- | ------------------- | ------------------- | --------------- |
-| Home       | 6 → **3**                   | 20 → **8**          | 1.02 s → 0.98 s     | 1.06 s → 1.02 s |
-| Collection | 6 → **3**                   | 21 → **10**         | 2.42 s → 2.20 s     | 2.57 s → 2.32 s |
-| Product    | 10 → **3**                  | 29 → **11**         | 1.02 s → **0.66 s** | 1.30 s → 1.18 s |
+- **Without the plugin**, every component drops a `<link rel="stylesheet">` into the page
+  body — the product page ships **48 of them**, each a late-discovered, render-blocking CDN
+  round trip.
+- **With the plugin**, that CSS arrives inline in the first HTML response, and the handful of
+  repeat-rendered grid components (product card, size selector, badge…) stay as cached links
+  via [`linkEntries`](#inline-vs-link-choosing-per-component).
 
-Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme, same day, same
-store. Collection paint times are dominated by product imagery, so CSS delivery barely moves them
-there — the run-to-run spread (±0.5 s) exceeds the difference shown.
+| Page       | Stylesheet requests | FCP             | LCP             | Performance score |
+| ---------- | ------------------- | --------------- | --------------- | ----------------- |
+| Collection | 23 → **12**         | 1.10 s → 1.03 s | 1.10 s → 1.07 s | 86 → **92**       |
+| Page       | 19 → **9**          | 0.91 s → 0.84 s | 0.95 s → 0.88 s | 94 → 94           |
+| Product    | 29 → **9**          | 0.94 s → 0.93 s | 0.98 s → 0.97 s | 92 → 92           |
 
-A second production theme — repeat-rendered grid components (product card, size selector,
-badge…) kept as cached links via `linkEntries` — measured the same way. Lighthouse flagged no
-stylesheet as render-blocking on this store in either version, so the win shows up in request
-count rather than paint times:
-
-| Page       | Stylesheet requests | FCP             | LCP             | Perf score  |
-| ---------- | ------------------- | --------------- | --------------- | ----------- |
-| Collection | 23 → **12**         | 1.10 s → 1.03 s | 1.10 s → 1.07 s | 86 → **92** |
-| Page       | 19 → **9**          | 0.91 s → 0.84 s | 0.95 s → 0.88 s | 94 → 94     |
-| Product    | 29 → **9**          | 0.94 s → 0.93 s | 0.98 s → 0.97 s | 92 → 92     |
-
-The `linkEntries` tuning is what makes those numbers: an earlier build of the same theme with
-**no** `linkEntries` inlined the collection grid's CSS once per rendered card — the same
-snippet up to 169 times, a 4.3 MB HTML document, and a slower LCP than the `<link>` baseline.
-Adding the repeat-rendered components to `linkEntries` cut that page to 1.1 MB. Measure your
-own theme both ways; the [build report](#build-diagnostics) tells you which entries to move.
+Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme: **half to
+two-thirds of stylesheet requests eliminated**, faster first paint on every page, and a
+six-point performance-score jump on the collection page — the page with the most components.
 
 ## Install
 

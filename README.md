@@ -62,6 +62,12 @@ Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme
 store. Collection paint times are dominated by product imagery, so CSS delivery barely moves them
 there — the run-to-run spread (±0.5 s) exceeds the difference shown.
 
+Product page, before → after:
+
+| Before | After |
+| --- | --- |
+| ![Lighthouse Product before](docs/images/lighthouse-product-before.png) | ![Lighthouse Product after](docs/images/lighthouse-product-after.png) |
+
 ## Install
 
 ```bash
@@ -129,6 +135,38 @@ cached `<link>` for CSS that would otherwise be duplicated or re-shipped:
 
 An entry in `linkEntries` is never inlined and never [split](#automatic-splitting-of-oversized-entries).
 
+## Vendor / UI-library CSS (Swiper, etc.)
+
+UI libraries ship large stylesheets that are the textbook `linkEntries` case: big, shared, and
+reused across pages. Give them a **dedicated entry** and keep it as a cached `<link>`:
+
+```css
+/* src/snippets/l-vendor-swiper.css */
+@import 'swiper/css';
+@import 'swiper/css/navigation';
+```
+
+```js
+shopifyInlineStyles({ linkEntries: ['l-vendor-swiper.css'] })
+```
+
+```liquid
+{% render 'vite-style', entry: '@/snippets/l-vendor-swiper.css' %}
+```
+
+Render it in the section(s) that use the library, so it loads only on pages that need it —
+fetched once, cached for every subsequent page view.
+
+Two rules keep this fast:
+
+1. **Import per-module, never the bundle.** `swiper/swiper-bundle.css` is ~18 KB; the core
+   (`swiper/css`) plus only the modules you use is often 3–6 KB. The biggest optimization is
+   bytes you don't ship.
+2. **Don't `@import` vendor CSS inside a component's inline entry.** The vendor bytes get
+   bundled into that entry, re-ship with every page view, duplicate per `{% render %}`, and
+   usually push the entry over the 15 KB cap into auto-splitting. The build warns when it
+   detects this.
+
 ## Automatic splitting of oversized entries
 
 Shopify's `inline_asset_content` **won't inline an asset of 15 KB or more** — so a single large
@@ -183,8 +221,10 @@ for split entries — sorted by size:
 
 It also warns when:
 
-- a CSS entrypoint is built but never referenced via `render 'vite-style'` in any Liquid file (orphan); or
-- an oversized entry can't be auto-split (an atomic block alone exceeds the 15 KB cap) and falls back to `<link>`.
+- a CSS entrypoint is built but never referenced via `render 'vite-style'` in any Liquid file (orphan);
+- an oversized entry can't be auto-split (an atomic block alone exceeds the 15 KB cap) and falls back to `<link>`; or
+- an inline entry `@import`s vendor CSS (a bare specifier like `'swiper/css'`) — see
+  [Vendor / UI-library CSS](#vendor--ui-library-css-swiper-etc).
 
 ## Migrating an existing vite-plugin-shopify theme
 

@@ -62,6 +62,23 @@ Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme
 store. Collection paint times are dominated by product imagery, so CSS delivery barely moves them
 there — the run-to-run spread (±0.5 s) exceeds the difference shown.
 
+A second production theme — repeat-rendered grid components (product card, size selector,
+badge…) kept as cached links via `linkEntries` — measured the same way. Lighthouse flagged no
+stylesheet as render-blocking on this store in either version, so the win shows up in request
+count rather than paint times:
+
+| Page       | Stylesheet requests | FCP             | LCP             | Perf score  |
+| ---------- | ------------------- | --------------- | --------------- | ----------- |
+| Collection | 23 → **12**         | 1.10 s → 1.03 s | 1.10 s → 1.07 s | 86 → **92** |
+| Page       | 19 → **9**          | 0.91 s → 0.84 s | 0.95 s → 0.88 s | 94 → 94     |
+| Product    | 29 → **9**          | 0.94 s → 0.93 s | 0.98 s → 0.97 s | 92 → 92     |
+
+The `linkEntries` tuning is what makes those numbers: an earlier build of the same theme with
+**no** `linkEntries` inlined the collection grid's CSS once per rendered card — the same
+snippet up to 169 times, a 4.3 MB HTML document, and a slower LCP than the `<link>` baseline.
+Adding the repeat-rendered components to `linkEntries` cut that page to 1.1 MB. Measure your
+own theme both ways; the [build report](#build-diagnostics) tells you which entries to move.
+
 ## Install
 
 ```bash

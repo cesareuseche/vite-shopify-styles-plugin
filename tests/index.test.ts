@@ -79,21 +79,27 @@ describe('closeBundle', () => {
 })
 
 describe('closeBundle vendor import warning', () => {
-  function runBuild(opts: { linkEntries?: string[]; source: string }): string[] {
+  function runBuild(opts: {
+    linkEntries?: string[]
+    source: string
+    entryFile?: string
+  }): string[] {
+    const entryFile = opts.entryFile ?? 'l-carousel.css'
+    const outFile = entryFile.replace(/\.\w+$/, '') + '-X.css'
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-vendor-'))
     const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-vendor-theme-'))
     const warnings: string[] = []
 
     fs.mkdirSync(path.join(root, 'src/snippets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'src/snippets/l-carousel.css'), opts.source)
+    fs.writeFileSync(path.join(root, 'src/snippets', entryFile), opts.source)
     fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'assets/l-carousel-X.css'), '.swiper{display:flex}')
+    fs.writeFileSync(path.join(root, 'assets', outFile), '.swiper{display:flex}')
     fs.writeFileSync(
       path.join(root, 'assets/manifest.json'),
       JSON.stringify({
-        'src/snippets/l-carousel.css': {
-          file: 'l-carousel-X.css',
-          src: 'src/snippets/l-carousel.css',
+        [`src/snippets/${entryFile}`]: {
+          file: outFile,
+          src: `src/snippets/${entryFile}`,
           isEntry: true,
         },
       }),
@@ -133,5 +139,21 @@ describe('closeBundle vendor import warning', () => {
   it('does not warn for local and alias imports', () => {
     const vendorWarnings = runBuild({ source: "@import './base.css';\n@import '@/snippets/x.css';" })
     expect(vendorWarnings).toEqual([])
+  })
+
+  it('does not warn for a preprocessor entry with a bare local import', () => {
+    const vendorWarnings = runBuild({
+      entryFile: 'l-carousel.scss',
+      source: "@import 'variables';\n.s { color: red }",
+    })
+    expect(vendorWarnings).toEqual([])
+  })
+
+  it('joins multiple vendor imports with commas in a single warning', () => {
+    const vendorWarnings = runBuild({
+      source: "@import 'swiper/css';\n@import 'swiper/css/navigation';\n.s { color: red }",
+    })
+    expect(vendorWarnings).toHaveLength(1)
+    expect(vendorWarnings[0]).toContain("'swiper/css', 'swiper/css/navigation'")
   })
 })

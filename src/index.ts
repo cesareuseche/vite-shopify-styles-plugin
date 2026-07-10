@@ -70,6 +70,7 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
 
       for (const entry of entries) {
         if (entry.link) continue
+        if (!/\.(css|pcss|postcss)$/.test(entry.key)) continue
         const vendors = findVendorImports(readFileSafe(path.resolve(config.root, entry.key)))
         if (vendors.length === 0) continue
         config.logger.warn(

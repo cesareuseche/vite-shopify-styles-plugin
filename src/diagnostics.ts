@@ -42,6 +42,9 @@ const NON_VENDOR_RE = /^(\.|\/|@\/|~\/|https?:|data:)/
  * ponytail: scans one file only — transitive local @imports aren't followed.
  * Resolve relative imports recursively if real themes hide vendor imports a level down.
  * Line-anchored matching (real @imports start a statement) is what keeps strings out.
+ * Preprocessor entries (.scss/.sass/.less/etc.) are skipped by the caller: bare specifiers
+ * there are ambiguous (partials like 'variables' resolve to local files) without running
+ * the preprocessor's module resolution, which this function doesn't do.
  */
 export function findVendorImports(css: string): string[] {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '')

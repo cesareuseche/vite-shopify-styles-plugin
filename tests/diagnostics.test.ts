@@ -76,6 +76,10 @@ describe('findVendorImports', () => {
     expect(findVendorImports(css)).toEqual([])
   })
 
+  it('ignores bare http: URLs', () => {
+    expect(findVendorImports("@import 'http://cdn.example.com/x.css';")).toEqual([])
+  })
+
   it('ignores @import inside comments', () => {
     const css = "/* @import 'swiper/css'; */\n/*\n@import 'swiper/css';\n*/\n.x { color: red }"
     expect(findVendorImports(css)).toEqual([])

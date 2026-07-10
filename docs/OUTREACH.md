@@ -13,18 +13,41 @@ Targets (found 2026-07-04 via GitHub search):
 - https://github.com/barrel/shopify-vite/issues/100 — vite.liquid hitting the
   256 KB snippet limit from many component entries; adjacent problem, lighter fit.
 
-Draft comment (adjust greeting per thread):
+Final comment for #218 (verified 2026-07-10, issue closed — comment lands for searchers):
 
-> In case it helps anyone landing here: I built a small companion plugin for
-> vite-plugin-shopify that does this — it renders each section/snippet's built
-> CSS as an inline `<style>` via Shopify's `inline_asset_content` filter instead
-> of a render-blocking `<link>`, while dev mode/HMR still delegates to
-> `vite-tag`. On a production theme (44 CSS entrypoints) it cut render-blocking
-> stylesheets on the product page from 10 to 3 and FCP from 1.0 s to 0.66 s
-> (desktop Lighthouse, median of 3). Repeat-rendered components can opt out per
-> entry to keep a cached link, and the build warns when an asset exceeds the
-> 15 KB inline cap.
+> In case it helps anyone landing here: I built this idea as a standalone
+> companion plugin for vite-plugin-shopify —
 > https://github.com/cesareuseche/vite-shopify-styles-plugin
+>
+> It generates a `vite-style` snippet that renders each section/snippet's built
+> CSS as an inline `<style>` via Shopify's `inline_asset_content` filter instead
+> of a render-blocking body `<link>`, while dev mode/HMR still delegates to
+> `vite-tag`. The sharp edges this thread anticipated are handled: CSS at or
+> over the 15 KB `inline_asset_content` cap is auto-split into ordered sub-15 KB
+> parts at build time (cascade preserved), repeat-rendered components keep a
+> cached `<link>` via a `linkEntries` opt-out, and the build warns about vendor
+> CSS `@import`ed into inline entries. On a production theme it cut stylesheet
+> requests roughly in half to two-thirds per page (e.g. 29 → 9 on the product
+> page) and lifted the collection page's Lighthouse performance score from 86
+> to 92 (desktop, median of 3, same store/day). Measured results and the
+> honest trade-offs are in the README.
+
+Final comment for #100 (256 KB snippet limit — adjacent problem, lighter touch):
+
+> Somewhat related, for anyone splitting CSS per component and landing here: I
+> maintain a companion plugin that moves component CSS out of `<link>` tags
+> entirely — it emits a compact generated snippet that maps each CSS entry to an
+> inline `<style>` via `inline_asset_content` (one `when` branch per entry, so
+> the snippet stays far from the 256 KB template limit even with dozens of
+> entries), with a per-entry opt-out to keep cached links for repeat-rendered
+> components. https://github.com/cesareuseche/vite-shopify-styles-plugin
+
+One-click post commands (`gh` is authenticated on this machine):
+
+```bash
+gh issue comment 218 --repo barrel/shopify-vite --body-file docs/outreach/comment-218.md
+gh issue comment 100 --repo barrel/shopify-vite --body-file docs/outreach/comment-100.md
+```
 
 ## 2. Awesome-list PRs
 

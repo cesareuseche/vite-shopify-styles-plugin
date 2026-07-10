@@ -62,12 +62,6 @@ Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme
 store. Collection paint times are dominated by product imagery, so CSS delivery barely moves them
 there — the run-to-run spread (±0.5 s) exceeds the difference shown.
 
-Product page, before → after:
-
-| Before | After |
-| --- | --- |
-| ![Lighthouse Product before](docs/images/lighthouse-product-before.png) | ![Lighthouse Product after](docs/images/lighthouse-product-after.png) |
-
 ## Install
 
 ```bash

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findOrphans, formatReport, type EntrySize } from '../src/diagnostics.js'
+import { findOrphans, findVendorImports, formatReport, type EntrySize } from '../src/diagnostics.js'
 import type { CssEntry } from '../src/generate.js'
 
 const badge: CssEntry = { key: 'src/snippets/l-badge.css', aliasPath: 'snippets/l-badge.css', files: ['l-badge-X.css'], link: false }
@@ -46,5 +46,47 @@ describe('findOrphans', () => {
   it('returns nothing when everything is referenced', () => {
     const liquid = ["'@/snippets/l-badge.css'"]
     expect(findOrphans([badge], liquid)).toEqual([])
+  })
+})
+
+describe('findVendorImports', () => {
+  it('returns bare specifiers from @import statements', () => {
+    const css = "@import 'swiper/css';\n@import \"swiper/css/navigation\";\n.x { color: red }"
+    expect(findVendorImports(css)).toEqual(['swiper/css', 'swiper/css/navigation'])
+  })
+
+  it('supports the url() form', () => {
+    expect(findVendorImports("@import url('swiper/css');")).toEqual(['swiper/css'])
+    expect(findVendorImports('@import url(swiper/css);')).toEqual(['swiper/css'])
+  })
+
+  it('ignores relative, absolute, and alias specifiers', () => {
+    const css = [
+      "@import './local.css';",
+      "@import '../shared.css';",
+      "@import '/abs.css';",
+      "@import '@/snippets/x.css';",
+      "@import '~/snippets/x.css';",
+    ].join('\n')
+    expect(findVendorImports(css)).toEqual([])
+  })
+
+  it('ignores remote and data URLs', () => {
+    const css = "@import 'https://fonts.example.com/x.css';\n@import '//cdn.example.com/x.css';"
+    expect(findVendorImports(css)).toEqual([])
+  })
+
+  it('ignores @import inside comments', () => {
+    const css = "/* @import 'swiper/css'; */\n/*\n@import 'swiper/css';\n*/\n.x { color: red }"
+    expect(findVendorImports(css)).toEqual([])
+  })
+
+  it('ignores @import-looking text mid-line (strings, url() values)', () => {
+    const css = 'content: "@import \'swiper/css\'"; background: url(\'swiper/img.png\');'
+    expect(findVendorImports(css)).toEqual([])
+  })
+
+  it('returns empty for CSS with no imports', () => {
+    expect(findVendorImports('.x { color: red }')).toEqual([])
   })
 })

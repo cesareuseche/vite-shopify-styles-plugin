@@ -78,6 +78,64 @@ describe('closeBundle', () => {
   })
 })
 
+describe('closeBundle autoLinkEntries', () => {
+  function runBuild(opts: { autoLinkEntries?: boolean }): { snippet: string; infos: string[] } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-'))
+    const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-theme-'))
+    const infos: string[] = []
+
+    fs.mkdirSync(path.join(root, 'src/snippets'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'src/snippets/l-card.css'), '.card{display:flex}')
+    fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'assets/l-card-X.css'), '.card{display:flex}')
+    fs.writeFileSync(
+      path.join(root, 'assets/manifest.json'),
+      JSON.stringify({
+        'src/snippets/l-card.css': {
+          file: 'l-card-X.css',
+          src: 'src/snippets/l-card.css',
+          isEntry: true,
+        },
+      }),
+    )
+    fs.mkdirSync(path.join(themeRoot, 'sections'), { recursive: true })
+    fs.writeFileSync(
+      path.join(themeRoot, 'sections/grid.liquid'),
+      "{% for p in c %}{% render 'vite-style', entry: '@/snippets/l-card.css' %}{% endfor %}",
+    )
+
+    const plugin = shopifyInlineStyles({ themeRoot, autoLinkEntries: opts.autoLinkEntries })
+    const configResolved = plugin.configResolved as (config: unknown) => void
+    const closeBundle = plugin.closeBundle as () => void
+
+    configResolved({
+      command: 'build',
+      root,
+      build: { outDir: 'assets', manifest: 'manifest.json' },
+      logger: { info: (msg: string) => infos.push(msg), warn: () => {}, error: () => {} },
+    } as unknown as ResolvedConfig)
+
+    closeBundle()
+    const snippet = fs.readFileSync(path.join(themeRoot, 'snippets/vite-style.liquid'), 'utf-8')
+    return { snippet, infos }
+  }
+
+  it('promotes a loop-rendered entry to a link and logs the reason', () => {
+    const { snippet, infos } = runBuild({ autoLinkEntries: true })
+    expect(snippet).toContain('assign vs_link = true')
+    const autoLogs = infos.filter((msg) => msg.includes('auto-link'))
+    expect(autoLogs).toHaveLength(1)
+    expect(autoLogs[0]).toContain('snippets/l-card.css')
+    expect(autoLogs[0]).toContain('loop')
+  })
+
+  it('leaves the entry inline when the option is off (default)', () => {
+    const { snippet, infos } = runBuild({})
+    expect(snippet).not.toContain('assign vs_link = true')
+    expect(infos.filter((msg) => msg.includes('auto-link'))).toEqual([])
+  })
+})
+
 describe('closeBundle vendor import warning', () => {
   function runBuild(opts: {
     linkEntries?: string[]

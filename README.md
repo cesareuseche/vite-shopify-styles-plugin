@@ -108,6 +108,16 @@ Then, in any section or snippet, render the style for that entry:
 
 A complete, runnable setup lives in [`examples/basic`](examples/basic).
 
+## Claude Code skill
+
+This repo doubles as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) shipping a
+skill that teaches Claude how to configure and troubleshoot this plugin. To install it:
+
+```
+/plugin marketplace add cesareuseche/vite-shopify-styles-plugin
+/plugin install vite-shopify-inline-styles@cesareuseche
+```
+
 ## How it works
 
 The plugin generates a single `snippets/vite-style.liquid` file and keeps it in sync with your
@@ -134,6 +144,33 @@ cached `<link>` for CSS that would otherwise be duplicated or re-shipped:
 | Large, shared CSS reused across many pages | **`linkEntries`** | A cached stylesheet beats re-shipping the same bytes on every page view. |
 
 An entry in `linkEntries` is never inlined and never [split](#automatic-splitting-of-oversized-entries).
+
+### Automatic `linkEntries` (`autoLinkEntries: true`)
+
+The table above can be decided by the build instead of by hand. With `autoLinkEntries: true`,
+the plugin statically analyzes your theme — the Liquid render graph, `templates/*.json`, and
+section groups — and promotes an entry from inline to `<link>` when inlining loses:
+
+- **Rendered inside a loop** (`{% for %}` or `{% render 'card' for products %}`), directly or
+  via a snippet — the inline CSS would duplicate once per iteration.
+- **Reachable from two or more sections** — the CSS duplicates whenever they share a page, and
+  shared CSS is worth caching.
+- **Present on every page** — rendered from `layout/`, from a section placed in a section group
+  (header/footer), or via `{% section %}` in the layout. A cached stylesheet ships once per
+  session instead of re-shipping inline with every page view.
+- **Placed on most templates** — the rendering sections appear in more than half of your JSON
+  templates.
+
+Every promotion is logged at build time with its reason, e.g.:
+
+```
+[vite-style] auto-link: 'snippets/l-card.css' → <link rel="stylesheet"> (rendered inside a loop — inline CSS would duplicate per iteration)
+```
+
+Manual `linkEntries` still works and is never overridden — auto-analysis only promotes inline
+entries to links, never the reverse. Note the analysis is build-time: sections a merchant adds
+in the theme editor after the build aren't seen, so their entries keep the inline default until
+the next build.
 
 ## Vendor / UI-library CSS (Swiper, etc.)
 
@@ -203,6 +240,7 @@ build report shows the part count for anything that was split.
 | Option | Default | Description |
 | --- | --- | --- |
 | `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for components rendered many times per page. |
+| `autoLinkEntries` | `false` | [Auto-promote entries to `<link>`](#automatic-linkentries-autolinkentries-true) when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Logged with reasons. |
 | `snippetName` | `'vite-style'` | Name of the generated snippet file. |
 | `themeRoot` | `'./'` | Theme root containing `snippets/`. Must match vite-plugin-shopify. |
 | `sourceCodeDir` | `'src'` | Directory the `@/` and `~/` aliases resolve against. Must match vite-plugin-shopify. |

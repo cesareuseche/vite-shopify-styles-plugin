@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Logger, Plugin, ResolvedConfig } from 'vite'
+import { decideAutoLinks, readThemeStructure, type LiquidFile } from './autolink.js'
 import { findOrphans, findVendorImports, formatReport, type EntrySize } from './diagnostics.js'
 import {
   extractCssEntries,
@@ -50,7 +51,27 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
 
       const manifest = readManifest(config)
       const outDir = path.resolve(config.root, config.build.outDir)
-      const entries = extractCssEntries(manifest, options).map((entry) => {
+      const liquidFiles = readLiquidFiles(options.themeRoot, snippetPath())
+
+      let cssEntries = extractCssEntries(manifest, options)
+      if (options.autoLinkEntries) {
+        const decisions = decideAutoLinks(
+          cssEntries,
+          liquidFiles,
+          readThemeStructure(options.themeRoot),
+        )
+        const autoLinked = new Set(decisions.map((decision) => decision.aliasPath))
+        cssEntries = cssEntries.map((entry) =>
+          autoLinked.has(entry.aliasPath) ? { ...entry, link: true } : entry,
+        )
+        for (const decision of decisions) {
+          config.logger.info(
+            `[vite-style] auto-link: '${decision.aliasPath}' → <link rel="stylesheet"> (${decision.reason})`,
+          )
+        }
+      }
+
+      const entries = cssEntries.map((entry) => {
         const sized: EntrySize = {
           ...entry,
           bytes: statSizeSafe(path.join(outDir, entry.files[0])),
@@ -61,7 +82,7 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
       writeSnippet(snippetPath(), generateBuildSnippet(entries))
       config.logger.info(formatReport(entries))
 
-      const liquidContents = readLiquidFiles(options.themeRoot, snippetPath())
+      const liquidContents = liquidFiles.map((file) => file.content)
       for (const orphan of findOrphans(entries, liquidContents)) {
         config.logger.warn(
           `[vite-style] '${orphan.key}' was built but is never rendered via '${options.snippetName}'`,
@@ -155,16 +176,19 @@ function readFileSafe(filePath: string): string {
   }
 }
 
-function readLiquidFiles(themeRoot: string, excludePath: string): string[] {
-  const contents: string[] = []
+function readLiquidFiles(themeRoot: string, excludePath: string): LiquidFile[] {
+  const files: LiquidFile[] = []
   for (const dir of LIQUID_DIRS) {
     const abs = path.resolve(themeRoot, dir)
     if (!fs.existsSync(abs)) continue
     for (const name of fs.readdirSync(abs, { recursive: true }) as string[]) {
       const file = path.join(abs, String(name))
       if (!file.endsWith('.liquid') || file === excludePath) continue
-      contents.push(fs.readFileSync(file, 'utf-8'))
+      files.push({
+        path: [dir, ...String(name).split(path.sep)].join('/'),
+        content: fs.readFileSync(file, 'utf-8'),
+      })
     }
   }
-  return contents
+  return files
 }

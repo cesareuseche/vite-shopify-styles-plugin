@@ -1,0 +1,245 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+import {
+  decideAutoLinks,
+  readThemeStructure,
+  type LiquidFile,
+  type ThemeStructure,
+} from '../src/autolink.js'
+import type { CssEntry } from '../src/generate.js'
+
+function entry(aliasPath: string, link = false): CssEntry {
+  return {
+    key: `src/${aliasPath}`,
+    aliasPath,
+    files: [path.posix.basename(aliasPath).replace('.css', '-X.css')],
+    link,
+  }
+}
+
+function theme(overrides: Partial<ThemeStructure> = {}): ThemeStructure {
+  return {
+    templates: [],
+    sectionTemplates: new Map(),
+    groupSections: new Set(),
+    ...overrides,
+  }
+}
+
+const render = (alias: string) => `{% render 'vite-style', entry: '@/${alias}' %}`
+
+describe('decideAutoLinks: loop detection', () => {
+  it('links an entry rendered inside a {% for %} loop', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/grid.liquid',
+        content: `{% for product in collection.products %}\n${render('snippets/l-card.css')}\n{% endfor %}`,
+      },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].aliasPath).toBe('snippets/l-card.css')
+    expect(decisions[0].reason).toContain('loop')
+  })
+
+  it('does not link an entry rendered after a closed loop', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/grid.liquid',
+        content: `{% for p in c %}x{% endfor %}\n${render('snippets/l-card.css')}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
+  })
+
+  it("links an entry whose snippet is rendered with the `render 'x' for` form", () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      {
+        path: 'sections/grid.liquid',
+        content: `{% render 'card' for collection.products as card %}`,
+      },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('loop')
+  })
+
+  it('links an entry whose snippet is rendered inside a loop elsewhere', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      {
+        path: 'sections/grid.liquid',
+        content: `{% for p in c %}{% render 'card', product: p %}{% endfor %}`,
+      },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('loop')
+  })
+})
+
+describe('decideAutoLinks: shared across sections', () => {
+  it('links an entry rendered directly from two sections', () => {
+    const files: LiquidFile[] = [
+      { path: 'sections/hero.liquid', content: render('snippets/l-button.css') },
+      { path: 'sections/footer-cta.liquid', content: render('snippets/l-button.css') },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-button.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('2 sections')
+  })
+
+  it('links an entry whose snippet is rendered from two sections (transitive)', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/l-button.liquid', content: render('snippets/l-button.css') },
+      { path: 'sections/hero.liquid', content: `{% render 'l-button' %}` },
+      { path: 'sections/newsletter.liquid', content: `{% render 'l-button' %}` },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-button.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+  })
+
+  it('leaves an entry rendered from a single low-coverage section inline', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/l-badge.liquid', content: render('snippets/l-badge.css') },
+      { path: 'sections/hero.liquid', content: `{% render 'l-badge' %}` },
+    ]
+    const structure = theme({
+      templates: ['index', 'product', 'collection'],
+      sectionTemplates: new Map([['hero', ['index']]]),
+    })
+    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
+  })
+})
+
+describe('decideAutoLinks: page coverage', () => {
+  it('links an entry rendered from the layout', () => {
+    const files: LiquidFile[] = [
+      { path: 'layout/theme.liquid', content: render('base.css') },
+    ]
+    const decisions = decideAutoLinks([entry('base.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('every page')
+  })
+
+  it('links an entry rendered from a section placed in a section group', () => {
+    const files: LiquidFile[] = [
+      { path: 'sections/header.liquid', content: render('sections/header.css') },
+    ]
+    const structure = theme({ groupSections: new Set(['header']) })
+    const decisions = decideAutoLinks([entry('sections/header.css')], files, structure)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('every page')
+  })
+
+  it("links an entry rendered from a section statically placed via {% section %} in the layout", () => {
+    const files: LiquidFile[] = [
+      { path: 'layout/theme.liquid', content: `{% section 'announcement' %}` },
+      { path: 'sections/announcement.liquid', content: render('sections/announcement.css') },
+    ]
+    const decisions = decideAutoLinks([entry('sections/announcement.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('every page')
+  })
+
+  it('links an entry whose sections cover more than half the templates', () => {
+    const files: LiquidFile[] = [
+      { path: 'sections/hero.liquid', content: render('sections/hero.css') },
+    ]
+    const structure = theme({
+      templates: ['index', 'product', 'collection'],
+      sectionTemplates: new Map([['hero', ['index', 'product']]]),
+    })
+    const decisions = decideAutoLinks([entry('sections/hero.css')], files, structure)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('2 of 3 templates')
+  })
+
+  it('does not apply the majority rule to a single-template theme', () => {
+    const files: LiquidFile[] = [
+      { path: 'sections/hero.liquid', content: render('sections/hero.css') },
+    ]
+    const structure = theme({
+      templates: ['index'],
+      sectionTemplates: new Map([['hero', ['index']]]),
+    })
+    expect(decideAutoLinks([entry('sections/hero.css')], files, structure)).toEqual([])
+  })
+})
+
+describe('decideAutoLinks: edges', () => {
+  it('skips entries that are already links', () => {
+    const files: LiquidFile[] = [
+      { path: 'layout/theme.liquid', content: render('base.css') },
+    ]
+    expect(decideAutoLinks([entry('base.css', true)], files, theme())).toEqual([])
+  })
+
+  it('skips entries never rendered anywhere', () => {
+    expect(decideAutoLinks([entry('snippets/l-orphan.css')], [], theme())).toEqual([])
+  })
+
+  it('survives snippet render cycles', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/a.liquid', content: `{% render 'b' %}\n${render('snippets/l-x.css')}` },
+      { path: 'snippets/b.liquid', content: `{% render 'a' %}` },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-x.css')], files, theme())).toEqual([])
+  })
+})
+
+describe('readThemeStructure', () => {
+  function makeTheme(files: Record<string, string>): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-'))
+    for (const [rel, content] of Object.entries(files)) {
+      const abs = path.join(root, rel)
+      fs.mkdirSync(path.dirname(abs), { recursive: true })
+      fs.writeFileSync(abs, content)
+    }
+    return root
+  }
+
+  it('collects template names and section types from JSON templates', () => {
+    const root = makeTheme({
+      'templates/index.json': JSON.stringify({
+        sections: { main: { type: 'hero' }, grid: { type: 'featured-grid' } },
+        order: ['main', 'grid'],
+      }),
+      'templates/product.json': JSON.stringify({
+        sections: { main: { type: 'main-product' } },
+        order: ['main'],
+      }),
+      'templates/customers/account.json': JSON.stringify({
+        sections: { main: { type: 'main-account' } },
+        order: ['main'],
+      }),
+    })
+    const structure = readThemeStructure(root)
+    expect(structure.templates.sort()).toEqual(['customers/account', 'index', 'product'])
+    expect(structure.sectionTemplates.get('hero')).toEqual(['index'])
+    expect(structure.sectionTemplates.get('main-product')).toEqual(['product'])
+  })
+
+  it('collects section types from section group JSON files', () => {
+    const root = makeTheme({
+      'sections/header-group.json': JSON.stringify({
+        type: 'header',
+        sections: { h: { type: 'header' }, a: { type: 'announcement-bar' } },
+        order: ['h', 'a'],
+      }),
+    })
+    const structure = readThemeStructure(root)
+    expect(structure.groupSections).toEqual(new Set(['header', 'announcement-bar']))
+  })
+
+  it('returns an empty structure for a theme without JSON templates and skips malformed JSON', () => {
+    const root = makeTheme({ 'templates/broken.json': '{not json' })
+    const structure = readThemeStructure(root)
+    expect(structure.templates).toEqual([])
+    expect(structure.sectionTemplates.size).toBe(0)
+    expect(structure.groupSections.size).toBe(0)
+  })
+})

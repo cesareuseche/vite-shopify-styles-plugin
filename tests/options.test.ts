@@ -5,6 +5,7 @@ describe('normalizeOptions', () => {
   it('applies defaults', () => {
     expect(normalizeOptions()).toEqual({
       linkEntries: [],
+      autoLinkEntries: false,
       snippetName: 'vite-style',
       themeRoot: './',
       sourceCodeDir: 'src',
@@ -16,11 +17,13 @@ describe('normalizeOptions', () => {
       normalizeOptions({
         snippetName: 'inline-css',
         linkEntries: ['a.css'],
+        autoLinkEntries: true,
         themeRoot: 'theme',
         sourceCodeDir: 'app',
       }),
     ).toEqual({
       linkEntries: ['a.css'],
+      autoLinkEntries: true,
       snippetName: 'inline-css',
       themeRoot: 'theme',
       sourceCodeDir: 'app',

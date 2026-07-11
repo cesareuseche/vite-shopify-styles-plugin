@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-10
+
+### Added
+
+- `autoLinkEntries` option: build-time static analysis of the theme (Liquid
+  render graph, `templates/*.json`, section groups) that automatically promotes
+  entries from inline to `<link rel="stylesheet">` when inlining loses —
+  rendered inside a loop, reachable from 2+ sections, present on every page via
+  layout/section groups, or placed on most templates. Each promotion is logged
+  with its reason. Default off; manual `linkEntries` is never overridden.
+
 ## [0.3.0] - 2026-07-08
 
 ### Added

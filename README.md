@@ -294,6 +294,21 @@ The build warning names the entry and its size.
 - A literal `</style>` inside CSS content would terminate the inline block early (does not occur in practice).
 - Unknown entries render an HTML comment (`<!-- vite-style: unknown entry ... -->`) rather than failing the page.
 
+## Contributing
+
+Contributions are welcome — bug reports, fixes, and ideas alike.
+
+```bash
+git clone https://github.com/cesareuseche/vite-shopify-styles-plugin
+cd vite-shopify-styles-plugin
+npm install
+npm test            # vitest; npm run test:coverage for the coverage report
+```
+
+Please include a test with any behavior change (the suite runs in CI), and open an
+[issue](https://github.com/cesareuseche/vite-shopify-styles-plugin/issues) first for larger
+features so we can agree on the approach.
+
 ## Releasing
 
 Publishing is automated via GitHub Actions (npm Trusted Publishing — no tokens):

@@ -51,14 +51,18 @@ gh issue comment 100 --repo barrel/shopify-vite --body-file docs/outreach/commen
 
 ## 2. Awesome-list PRs
 
-- [ ] [vitejs/awesome-vite](https://github.com/vitejs/awesome-vite) — under
-  Plugins → Framework-agnostic:
-  `- [vite-plugin-shopify-inline-styles](https://github.com/cesareuseche/vite-shopify-styles-plugin) - Render Shopify section/snippet CSS as inline style tags via inline_asset_content.`
+- [ ] [vitejs/awesome-vite](https://github.com/vitejs/awesome-vite) — under the
+  `### Shopify` category (README ~line 788), appended AFTER the existing
+  `vite-plugin-shopify` entry. Verified against `.github/contributing.md`
+  2026-07-10: entries go at the END of the list (first-come-first-serve, not
+  alphabetical), description is one sentence ≤24 words, no emoji, and must not
+  say "Vite plugin"/"for Vite" (implied). Ready-to-paste line:
+  `- [vite-plugin-shopify-inline-styles](https://github.com/cesareuseche/vite-shopify-styles-plugin) - Render each section/snippet's built CSS as inline style tags via inline_asset_content instead of render-blocking links.`
 - [ ] [julionc/awesome-shopify](https://github.com/julionc/awesome-shopify) —
-  development-tools section, same one-liner.
+  development-tools section; check that list's own format before opening.
 
-Follow each list's CONTRIBUTING.md (alphabetical order, description format)
-before opening the PR.
+Note: TanStack's showcase (tanstack.com/showcase) was evaluated 2026-07-10 and
+is not applicable — it requires the project to use TanStack libraries.
 
 ## 3. GitHub repo topics
 

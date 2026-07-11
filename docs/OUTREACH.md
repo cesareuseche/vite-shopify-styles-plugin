@@ -64,7 +64,9 @@ gh issue comment 100 --repo barrel/shopify-vite --body-file docs/outreach/commen
 Note: TanStack's showcase (tanstack.com/showcase) was evaluated 2026-07-10 and
 is not applicable — it requires the project to use TanStack libraries.
 
-## 3. GitHub repo topics
+## 3. GitHub repo topics — DONE 2026-07-10
+
+All six topics set, plus repo description and npm homepage URL, via `gh repo edit`.
 
 Run once (needs `gh` authenticated):
 

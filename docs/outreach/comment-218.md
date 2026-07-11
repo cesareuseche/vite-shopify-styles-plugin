@@ -1,5 +1,0 @@
-In case it helps anyone landing here: I built this idea as a standalone companion plugin for vite-plugin-shopify — https://github.com/cesareuseche/vite-shopify-styles-plugin
-
-It generates a `vite-style` snippet that renders each section/snippet's built CSS as an inline `<style>` via Shopify's `inline_asset_content` filter instead of a render-blocking body `<link>`, while dev mode/HMR still delegates to `vite-tag`. The sharp edges this thread anticipated are handled: CSS at or over the 15 KB `inline_asset_content` cap is auto-split into ordered sub-15 KB parts at build time (cascade preserved), repeat-rendered components keep a cached `<link>` via a `linkEntries` opt-out, and the build warns about vendor CSS `@import`ed into inline entries.
-
-On a production theme it cut stylesheet requests roughly in half to two-thirds per page (e.g. 29 → 9 on the product page) and lifted the collection page's Lighthouse performance score from 86 to 92 (desktop, median of 3, same store/day). Measured results and the honest trade-offs are in the README.

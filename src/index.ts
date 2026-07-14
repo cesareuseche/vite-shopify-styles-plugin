@@ -66,9 +66,12 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
       const liquidFiles = readLiquidFiles(options.themeRoot, snippetPath())
       const theme = readThemeStructure(options.themeRoot)
 
-      let cssEntries = extractCssEntries(manifest, options)
+      let cssEntries: EntrySize[] = extractCssEntries(manifest, options).map((entry) => ({
+        ...entry,
+        bytes: statSizeSafe(path.join(outDir, entry.files[0])),
+      }))
       if (options.autoLinkEntries) {
-        const decisions = decideAutoLinks(cssEntries, liquidFiles, theme)
+        const decisions = decideAutoLinks(cssEntries, liquidFiles, theme, options.autoLinkMinBytes)
         const autoLinked = new Set(decisions.map((decision) => decision.aliasPath))
         cssEntries = cssEntries.map((entry) =>
           autoLinked.has(entry.aliasPath) ? { ...entry, link: true } : entry,
@@ -80,13 +83,7 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
         }
       }
 
-      const entries = cssEntries.map((entry) => {
-        const sized: EntrySize = {
-          ...entry,
-          bytes: statSizeSafe(path.join(outDir, entry.files[0])),
-        }
-        return autoSplit(sized, outDir, config.logger)
-      })
+      const entries = cssEntries.map((entry) => autoSplit(entry, outDir, config.logger))
 
       writeSnippet(snippetPath(), generateBuildSnippet(entries))
       config.logger.info(formatReport(entries))

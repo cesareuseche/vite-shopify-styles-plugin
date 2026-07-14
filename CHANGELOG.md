@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+
+- `autoLinkMinBytes` option (default 3000): `autoLinkEntries` never promotes an
+  entry below this built size — under ~3 KB a render-blocking stylesheet
+  request costs more than re-shipping the bytes inline, so small entries stay
+  inline no matter how widely they're used. Makes `autoLinkEntries: true` safe
+  to enable by default.
+
 ## [0.5.0] - 2026-07-14
 
 ### Added

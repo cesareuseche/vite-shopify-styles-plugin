@@ -79,15 +79,22 @@ describe('closeBundle', () => {
 })
 
 describe('closeBundle autoLinkEntries', () => {
-  function runBuild(opts: { autoLinkEntries?: boolean }): { snippet: string; infos: string[] } {
+  // Above the 3 KB autoLinkMinBytes default, so the size gate lets the heuristics run.
+  const LARGE_CSS = '.card{display:flex}'.repeat(200)
+
+  function runBuild(opts: {
+    autoLinkEntries?: boolean
+    css?: string
+  }): { snippet: string; infos: string[] } {
+    const css = opts.css ?? LARGE_CSS
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-'))
     const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-theme-'))
     const infos: string[] = []
 
     fs.mkdirSync(path.join(root, 'src/snippets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'src/snippets/l-card.css'), '.card{display:flex}')
+    fs.writeFileSync(path.join(root, 'src/snippets/l-card.css'), css)
     fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'assets/l-card-X.css'), '.card{display:flex}')
+    fs.writeFileSync(path.join(root, 'assets/l-card-X.css'), css)
     fs.writeFileSync(
       path.join(root, 'assets/manifest.json'),
       JSON.stringify({
@@ -131,6 +138,12 @@ describe('closeBundle autoLinkEntries', () => {
 
   it('leaves the entry inline when the option is off (default)', () => {
     const { snippet, infos } = runBuild({})
+    expect(snippet).not.toContain('assign vs_link = true')
+    expect(infos.filter((msg) => msg.includes('auto-link'))).toEqual([])
+  })
+
+  it('keeps a small loop-rendered entry inline (below the autoLinkMinBytes gate)', () => {
+    const { snippet, infos } = runBuild({ autoLinkEntries: true, css: '.card{display:flex}' })
     expect(snippet).not.toContain('assign vs_link = true')
     expect(infos.filter((msg) => msg.includes('auto-link'))).toEqual([])
   })

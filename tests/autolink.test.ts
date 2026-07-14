@@ -11,12 +11,13 @@ import {
 } from '../src/autolink.js'
 import type { CssEntry } from '../src/generate.js'
 
-function entry(aliasPath: string, link = false): CssEntry {
+function entry(aliasPath: string, link = false): CssEntry & { bytes: number } {
   return {
     key: `src/${aliasPath}`,
     aliasPath,
     files: [path.posix.basename(aliasPath).replace('.css', '-X.css')],
     link,
+    bytes: 5000,
   }
 }
 
@@ -189,6 +190,20 @@ describe('decideAutoLinks: edges', () => {
       { path: 'snippets/b.liquid', content: `{% render 'a' %}` },
     ]
     expect(decideAutoLinks([entry('snippets/l-x.css')], files, theme())).toEqual([])
+  })
+})
+
+describe('decideAutoLinks: size gate', () => {
+  const files: LiquidFile[] = [{ path: 'layout/theme.liquid', content: render('base.css') }]
+
+  it('never promotes an entry below minBytes, whatever the heuristics say', () => {
+    const small = { ...entry('base.css'), bytes: 2999 }
+    expect(decideAutoLinks([small], files, theme(), 3000)).toEqual([])
+  })
+
+  it('promotes an entry at or above minBytes', () => {
+    const big = { ...entry('base.css'), bytes: 3000 }
+    expect(decideAutoLinks([big], files, theme(), 3000)).toHaveLength(1)
   })
 })
 

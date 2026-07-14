@@ -176,7 +176,11 @@ An entry in `linkEntries` is never inlined and never [split](#automatic-splittin
 
 The table above can be decided by the build instead of by hand. With `autoLinkEntries: true`,
 the plugin statically analyzes your theme — the Liquid render graph, `templates/*.json`, and
-section groups — and promotes an entry from inline to `<link>` when inlining loses:
+section groups — and promotes an entry from inline to `<link>` when inlining loses.
+
+Entries smaller than `autoLinkMinBytes` (default 3 KB) are **never promoted**: below that
+size, an extra render-blocking request costs more than re-shipping the bytes inline with the
+HTML, no matter how widely the entry is used. Above the gate, an entry is promoted when it is:
 
 - **Rendered inside a loop** (`{% for %}` or `{% render 'card' for products %}`), directly or
   via a snippet — grid components appear on many page views, so their CSS is worth caching.
@@ -266,6 +270,7 @@ build report shows the part count for anything that was split.
 | --- | --- | --- |
 | `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for large CSS reused across many pages. |
 | `autoLinkEntries` | `false` | [Auto-promote entries to `<link>`](#automatic-linkentries-autolinkentries-true) when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Logged with reasons. |
+| `autoLinkMinBytes` | `3000` | Minimum built size for `autoLinkEntries` to promote an entry. Below it, the render-blocking request costs more than the re-shipped inline bytes, so small entries always stay inline. |
 | `templateBudget` | — | Bytes of inline CSS a single template may ship before the build warns (e.g. `50_000`). The [per-template report](#build-diagnostics) always prints; the budget only adds warnings. |
 | `snippetName` | `'vite-style'` | Name of the generated snippet file. |
 | `themeRoot` | `'./'` | Theme root containing `snippets/`. Must match vite-plugin-shopify. |

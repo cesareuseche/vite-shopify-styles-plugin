@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+
+- Once-per-page deduplication: the generated snippet guards every entry with a
+  Liquid `{% increment %}` counter (the one piece of state shared across
+  `{% render %}` sandboxes), so each entry's `<style>`/`<link>` tag is emitted
+  only on its first render per page — components can keep their
+  `render 'vite-style'` call inside the snippet and repeat freely (grids,
+  static repeats) without duplicating CSS. `autoLinkEntries` reasons were
+  reworded: promotions are now purely about cross-page caching, since
+  intra-page duplication no longer exists.
+
+- Per-template inline CSS weight report: every build prints how many bytes of
+  inline CSS each JSON template ships in total, from the same render-graph
+  analysis as `autoLinkEntries`. New `templateBudget` option (bytes) warns when
+  a template exceeds it and suggests `linkEntries`.
+
 ## [0.4.0] - 2026-07-10
 
 ### Added

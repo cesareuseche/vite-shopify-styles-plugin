@@ -64,11 +64,19 @@ export function generateBuildSnippet(entries: CssEntry[]): string {
 `
   }
 
+  // Each branch bumps a per-entry {% increment %} counter. Increment counters are the
+  // one piece of state Liquid shares across {% render %} sandboxes, so the first render
+  // of an entry on a page sees '0' and emits the tag; repeat renders see '1', '2', …
+  // and emit nothing — one <style>/<link> per entry per page, no matter how many times
+  // a component renders. The counter name must be a literal, hence one per branch.
   const branches = entries
-    .map((entry) => {
+    .map((entry, index) => {
       const lines = [
         `    when '@/${entry.aliasPath}' or '~/${entry.aliasPath}'`,
         `      assign vs_asset = '${entry.files.join(',')}'`,
+        `      capture vs_seen`,
+        `        increment vite_style_once_${index}`,
+        `      endcapture`,
       ]
       if (entry.link) lines.push('      assign vs_link = true')
       return lines.join('\n')
@@ -83,13 +91,15 @@ ${branches}
 -%}
 {%- if vs_asset == blank -%}
   <!-- vite-style: unknown entry '{{ entry }}' -->
-{%- elsif vs_link -%}
-  {{ vs_asset | asset_url | stylesheet_tag }}
-{%- else -%}
-  {%- assign vs_parts = vs_asset | split: ',' -%}
-  {%- for vs_part in vs_parts -%}
-    <style data-vite-style="{{ entry }}">{{ vs_part | inline_asset_content }}</style>
-  {%- endfor -%}
+{%- elsif vs_seen == '0' -%}
+  {%- if vs_link -%}
+    {{ vs_asset | asset_url | stylesheet_tag }}
+  {%- else -%}
+    {%- assign vs_parts = vs_asset | split: ',' -%}
+    {%- for vs_part in vs_parts -%}
+      <style data-vite-style="{{ entry }}">{{ vs_part | inline_asset_content }}</style>
+    {%- endfor -%}
+  {%- endif -%}
 {%- endif -%}
 `
 }

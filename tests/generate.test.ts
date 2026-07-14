@@ -100,6 +100,19 @@ describe('generateBuildSnippet', () => {
     expect(snippet).toContain("<!-- vite-style: unknown entry '{{ entry }}' -->")
   })
 
+  it('guards every branch with a per-entry increment counter and renders only on first sight', () => {
+    const snippet = generateBuildSnippet(entries)
+    expect(snippet).toContain('increment vite_style_once_0')
+    expect(snippet).toContain('increment vite_style_once_1')
+    expect(snippet).toContain('increment vite_style_once_2')
+    expect(snippet).not.toContain('increment vite_style_once_3')
+    expect(snippet).toContain("{%- elsif vs_seen == '0' -%}")
+    // the guard wraps both the inline and link paths
+    const guarded = snippet.split("vs_seen == '0'")[1]
+    expect(guarded).toContain('inline_asset_content')
+    expect(guarded).toContain('stylesheet_tag')
+  })
+
   it('preserves entry order (already sorted upstream) and is deterministic', () => {
     const first = generateBuildSnippet(entries)
     const second = generateBuildSnippet(entries)

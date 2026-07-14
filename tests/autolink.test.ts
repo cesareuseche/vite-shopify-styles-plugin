@@ -43,7 +43,7 @@ describe('decideAutoLinks: loop detection', () => {
     const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
     expect(decisions).toHaveLength(1)
     expect(decisions[0].aliasPath).toBe('snippets/l-card.css')
-    expect(decisions[0].reason).toContain('loop')
+    expect(decisions[0].reason).toContain('duplicate per render')
   })
 
   it('does not link an entry rendered after a closed loop', () => {
@@ -66,7 +66,7 @@ describe('decideAutoLinks: loop detection', () => {
     ]
     const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
     expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('loop')
+    expect(decisions[0].reason).toContain('duplicate per render')
   })
 
   it('links an entry whose snippet is rendered inside a loop elsewhere', () => {
@@ -79,7 +79,7 @@ describe('decideAutoLinks: loop detection', () => {
     ]
     const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
     expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('loop')
+    expect(decisions[0].reason).toContain('duplicate per render')
   })
 })
 
@@ -193,10 +193,48 @@ describe('decideAutoLinks: edges', () => {
   })
 })
 
+describe('decideAutoLinks: static repetition (no loop)', () => {
+  it('links an entry rendered twice in the same file', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/featured.liquid',
+        content: `${render('snippets/l-card.css')}\n${render('snippets/l-card.css')}`,
+      },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('duplicate per render')
+  })
+
+  it('links an entry whose snippet is rendered twice by the same file', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      {
+        path: 'sections/featured.liquid',
+        content: `{% render 'card', product: a %}\n{% render 'card', product: b %}`,
+      },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('duplicate per render')
+  })
+
+  it('does not flag two different snippets rendered once each', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      {
+        path: 'sections/featured.liquid',
+        content: `{% render 'card' %}\n{% render 'other' %}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
+  })
+})
+
 describe('decideAutoLinks: size gate', () => {
   const files: LiquidFile[] = [{ path: 'layout/theme.liquid', content: render('base.css') }]
 
-  it('never promotes an entry below minBytes, whatever the heuristics say', () => {
+  it('never promotes a small entry via the caching heuristics', () => {
     const small = { ...entry('base.css'), bytes: 2999 }
     expect(decideAutoLinks([small], files, theme(), 3000)).toEqual([])
   })
@@ -204,6 +242,19 @@ describe('decideAutoLinks: size gate', () => {
   it('promotes an entry at or above minBytes', () => {
     const big = { ...entry('base.css'), bytes: 3000 }
     expect(decideAutoLinks([big], files, theme(), 3000)).toHaveLength(1)
+  })
+
+  it('repetition bypasses the gate — a tiny loop-rendered entry is still promoted', () => {
+    const loopFiles: LiquidFile[] = [
+      {
+        path: 'sections/grid.liquid',
+        content: `{% for p in c %}${render('snippets/l-card.css')}{% endfor %}`,
+      },
+    ]
+    const tiny = { ...entry('snippets/l-card.css'), bytes: 300 }
+    const decisions = decideAutoLinks([tiny], loopFiles, theme(), 3000)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0].reason).toContain('duplicate per render')
   })
 })
 

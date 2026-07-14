@@ -5,6 +5,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Removed
+
+- **Once-per-page deduplication (0.5.0) — it never worked and has been removed.**
+  Shopify's `{% render %}` sandbox isolates `{% increment %}` counters too (each
+  render starts its own counter at 0), so the guard always read '0' and emitted
+  every time. Verified against a production theme where per-render counters
+  never advance. Repeat-rendered inline entries duplicate their CSS per render;
+  the fix is `<link>` delivery, below.
+
+### Changed
+
+- `autoLinkEntries` promotes repeat-rendered entries (in a loop, or rendered
+  2+ times by one file — a new detection) **regardless of `autoLinkMinBytes`**:
+  duplication multiplies the inline cost per render, while repeated `<link>`
+  tags cost ~150 bytes each and one cached download. The size gate now applies
+  only to the caching-based promotions.
+
 ## [0.6.0] - 2026-07-14
 
 ### Added

@@ -39,17 +39,21 @@ filter), so the styles arrive **with the page itself** and there's nothing left 
 - **Zero extra requests** for inlined CSS — no per-component CDN round trips.
 - **Faster first paint** — no stylesheet downloads block rendering ([measured results below](#real-world-results)).
 - **No flash of unstyled content** — styles always land before the markup they style.
-- **Once per page, automatically** — a card rendered 24 times in a grid ships its CSS once
-  ([deduplication](#once-per-page-deduplication)).
+- **Repeat-rendered components handled** — a card rendered 24 times in a grid would duplicate
+  its inline CSS 24×, so [`autoLinkEntries`](#automatic-linkentries-autolinkentries-true)
+  detects those and ships them as a single cached `<link>` instead.
 - **Handles Shopify's limits for you** — CSS over the 15 KB inline cap is
   [split automatically](#automatic-splitting-of-oversized-entries).
 - **Dev mode untouched** — locally, CSS still loads from the Vite dev server with hot reload.
   JS entrypoints keep using `vite-tag` everywhere.
 
-**The one trade-off:** inline CSS isn't cached by the browser — it re-ships with every page
-view. That's a great deal for small component CSS and a bad one for big shared stylesheets,
-so those can stay as classic cached `<link>`s via
-[`linkEntries`](#inline-vs-link-choosing-per-component).
+**The trade-offs:** inline CSS isn't cached by the browser (it re-ships with every page view),
+and a component rendered many times on one page duplicates its inline CSS per render —
+Liquid's `{% render %}` sandbox isolates *all* state, so there is no way to emit it just once.
+Both cases have the same answer: ship that entry as a cached `<link>` via
+[`linkEntries`](#inline-vs-link-choosing-per-component), or let
+[`autoLinkEntries`](#automatic-linkentries-autolinkentries-true) decide from your theme's
+structure.
 
 ## Real-world results
 
@@ -120,8 +124,11 @@ The `@/` prefix means "relative to your source dir" (`src/` by default):
 <span class="badge">…</span>
 ```
 
-Don't worry about a component rendering many times on a page — its CSS is emitted
-[only once](#once-per-page-deduplication).
+One thing to know: each render of that line emits the CSS again, and Liquid gives us no way
+to dedupe within a page. For components rendered many times (a product card in a grid, and
+the snippets inside it), enable
+[`autoLinkEntries: true`](#automatic-linkentries-autolinkentries-true) — the build detects
+them and ships a cached `<link>` instead, which the browser downloads only once.
 
 ### 4. Build
 
@@ -172,7 +179,7 @@ build. Its behavior differs by mode:
 
 JS entrypoints are untouched — they keep using `vite-tag`. This plugin only handles CSS.
 
-### Once-per-page deduplication
+### Repeat-rendered components
 
 Components usually render their own style right inside the snippet:
 
@@ -182,32 +189,24 @@ Components usually render their own style right inside the snippet:
 <l-product-card>…</l-product-card>
 ```
 
-Render that card 24 times in a grid and `vite-style` runs 24 times — but the tag is emitted
-**only on the first render**. Liquid's `{% render %}` is sandboxed, so snippets can't share
-`assign`ed state, but `{% increment %}` counters *are* shared across render scopes. The
-generated snippet bumps a per-entry counter and only emits when it reads `0`:
+Render that card 24 times in a grid and its CSS is emitted 24 times. There is no way around
+this in Liquid: `{% render %}` runs each snippet in a fully isolated sandbox — even
+`{% increment %}` counters start fresh per render — so a snippet can never know a sibling
+already emitted the style.
 
-```liquid
-capture vs_seen
-  increment vite_style_once_3
-endcapture
-```
-
-This applies to inline `<style>` and `<link>` entries alike, with no configuration and no
-change to how you author components. The tag lands at the component's *first* render position,
-which always precedes the markup it styles. (Sections fetched later via the Section Rendering
-API — infinite scroll, filtering — are a fresh render context, so they re-include their styles
-and stay self-contained.)
+The fix is delivery mode, not dedupe: for repeat-rendered entries, a `<link>` tag repeated 24
+times costs ~150 bytes each and **one** cached download, while inline `<style>` repeats the
+full CSS every time. That's why `autoLinkEntries` promotes any entry rendered repeatedly on a
+page (in a loop, or several times by one file) to `<link>` — regardless of its size.
 
 ## Inline vs. `<link>`: choosing per component
 
-Inlining is the right default, but not for every component. Thanks to
-[once-per-page deduplication](#once-per-page-deduplication), how many times a component renders
-on one page doesn't matter — the choice is purely about **cross-page caching**:
+Inlining is the right default, but not for every component:
 
 | Situation | Choose | Why |
 | --- | --- | --- |
-| Small component CSS (badge, card, hero, banner) | **inline** (default) | Removes a render-blocking request from the critical path; ships once per page regardless of render count. |
+| Small CSS, rendered once or twice per page (hero, banner, section) | **inline** (default) | Removes a render-blocking request from the critical path. |
+| Rendered many times per page (product card in a grid, and its children) | **`linkEntries`** | Inline CSS duplicates per `{% render %}`; a `<link>` is downloaded once and cached. |
 | Large, shared CSS reused across many pages | **`linkEntries`** | A cached stylesheet beats re-shipping the same bytes with every page view. |
 
 An entry in `linkEntries` is never inlined and never [split](#automatic-splitting-of-oversized-entries).
@@ -218,12 +217,12 @@ The table above can be decided by the build instead of by hand. With `autoLinkEn
 the plugin statically analyzes your theme — the Liquid render graph, `templates/*.json`, and
 section groups — and promotes an entry from inline to `<link>` when inlining loses.
 
-Entries smaller than `autoLinkMinBytes` (default 3 KB) are **never promoted**: below that
-size, an extra render-blocking request costs more than re-shipping the bytes inline with the
-HTML, no matter how widely the entry is used. Above the gate, an entry is promoted when it is:
+An entry is promoted when it is:
 
-- **Rendered inside a loop** (`{% for %}` or `{% render 'card' for products %}`), directly or
-  via a snippet — grid components appear on many page views, so their CSS is worth caching.
+- **Rendered repeatedly on a page** — inside a loop (`{% for %}` or
+  `{% render 'card' for products %}`), or rendered two or more times by the same file,
+  directly or via a snippet. Inline CSS duplicates per render, so this promotion applies
+  **regardless of entry size**.
 - **Reachable from two or more sections** — shared CSS is worth caching.
 - **Present on every page** — rendered from `layout/`, from a section placed in a section group
   (header/footer), or via `{% section %}` in the layout. A cached stylesheet ships once per
@@ -231,10 +230,15 @@ HTML, no matter how widely the entry is used. Above the gate, an entry is promot
 - **Placed on most templates** — the rendering sections appear in more than half of your JSON
   templates.
 
+The last three are caching-based promotions and only apply to entries of at least
+`autoLinkMinBytes` (default 3 KB) — below that, a render-blocking request costs more than
+re-shipping the bytes inline. The repetition promotion ignores the gate, because duplication
+multiplies the inline cost by the render count.
+
 Every promotion is logged at build time with its reason, e.g.:
 
 ```
-[vite-style] auto-link: 'snippets/l-card.css' → <link rel="stylesheet"> (rendered inside a loop — repeat-rendered component CSS is worth a cached <link>)
+[vite-style] auto-link: 'snippets/l-card.css' → <link rel="stylesheet"> (rendered repeatedly on a page — inline CSS would duplicate per render)
 ```
 
 Manual `linkEntries` still works and is never overridden — auto-analysis only promotes inline
@@ -310,7 +314,7 @@ build report shows the part count for anything that was split.
 | --- | --- | --- |
 | `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for large CSS reused across many pages. |
 | `autoLinkEntries` | `false` | [Auto-promote entries to `<link>`](#automatic-linkentries-autolinkentries-true) when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Logged with reasons. |
-| `autoLinkMinBytes` | `3000` | Minimum built size for `autoLinkEntries` to promote an entry. Below it, the render-blocking request costs more than the re-shipped inline bytes, so small entries always stay inline. |
+| `autoLinkMinBytes` | `3000` | Minimum built size for `autoLinkEntries`'s **caching-based** promotions (every page / shared / most templates). Repeat-rendered entries are promoted regardless of size — duplication multiplies the inline cost. |
 | `templateBudget` | — | Bytes of inline CSS a single template may ship before the build warns (e.g. `50_000`). The [per-template report](#build-diagnostics) always prints; the budget only adds warnings. |
 | `snippetName` | `'vite-style'` | Name of the generated snippet file. |
 | `themeRoot` | `'./'` | Theme root containing `snippets/`. Must match vite-plugin-shopify. |
@@ -392,13 +396,20 @@ rendered anywhere (the reverse mistake).
 to inline and couldn't be safely split (see the [safety fallback](#automatic-splitting-of-oversized-entries)).
 The build warning names the entry and its size.
 
-**Which CSS should I *not* inline?** Big stylesheets reused on many pages — vendor/UI-library
-CSS like Swiper is the textbook case. Put those in [`linkEntries`](#inline-vs-link-choosing-per-component)
-so the browser downloads them once and caches them, or let
-[`autoLinkEntries`](#automatic-linkentries-autolinkentries-true) decide from your theme's structure.
+**Which CSS should I *not* inline?** Two kinds: components rendered many times per page
+(product cards in a grid, and the snippets inside them — inline CSS
+[duplicates per render](#repeat-rendered-components)), and big stylesheets reused on many
+pages (vendor/UI-library CSS like Swiper). Put those in
+[`linkEntries`](#inline-vs-link-choosing-per-component) so the browser downloads them once and
+caches them, or let [`autoLinkEntries`](#automatic-linkentries-autolinkentries-true) detect
+both cases from your theme's structure.
 
 ## Limitations
 
+- **No intra-page dedupe is possible.** Liquid's `{% render %}` sandbox isolates all state —
+  including `{% increment %}` counters — so a repeat-rendered inline entry emits its CSS once
+  per render. Use `linkEntries`/`autoLinkEntries` for those components; duplicate `<link>` tags
+  are downloaded once.
 - Only the `@/` and `~/` entry alias forms are supported.
 - Dev mode assumes vite-plugin-shopify's default `vite-tag` snippet name.
 - A literal `</style>` inside CSS content would terminate the inline block early (does not occur in practice).

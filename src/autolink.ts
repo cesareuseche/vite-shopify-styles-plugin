@@ -39,11 +39,7 @@ export function decideAutoLinks(
   theme: ThemeStructure,
 ): AutoLinkDecision[] {
   const renderers = buildSnippetRenderers(files)
-  const everyPageSections = new Set(theme.groupSections)
-  for (const file of files) {
-    if (!file.path.startsWith('layout/')) continue
-    for (const match of file.content.matchAll(SECTION_TAG_RE)) everyPageSections.add(match[1])
-  }
+  const everyPageSections = collectEveryPageSections(files, theme)
 
   return entries.flatMap((entry) => {
     if (entry.link) return []
@@ -78,6 +74,73 @@ function decide(
     return `used on ${covered.size} of ${theme.templates.length} templates — a cached <link> beats re-shipping per view`
   }
   return null
+}
+
+export interface TemplateWeight {
+  /** JSON template name, e.g. 'product' */
+  template: string
+  /** Total bytes of inline CSS the template ships */
+  bytes: number
+}
+
+/**
+ * Total inline CSS bytes each JSON template ships, from the same render-graph analysis
+ * as decideAutoLinks. Entries reachable from layout/ or a section group count toward
+ * every template. Sorted heaviest first.
+ */
+export function computeTemplateWeights(
+  entries: Array<CssEntry & { bytes: number }>,
+  files: LiquidFile[],
+  theme: ThemeStructure,
+): TemplateWeight[] {
+  if (theme.templates.length === 0) return []
+  const renderers = buildSnippetRenderers(files)
+  const everyPageSections = collectEveryPageSections(files, theme)
+  const weights = new Map(theme.templates.map((template) => [template, 0]))
+
+  // ponytail: each entry counts once per template — a loop-repeated render actually ships
+  // N copies; weight per-render if the undercount misleads in practice.
+  for (const entry of entries) {
+    if (entry.link || entry.bytes === 0) continue
+    const { roots } = traceToRoots(entry, files, renderers)
+    for (const template of templatesForRoots(roots, everyPageSections, theme)) {
+      weights.set(template, (weights.get(template) ?? 0) + entry.bytes)
+    }
+  }
+
+  return [...weights]
+    .map(([template, bytes]) => ({ template, bytes }))
+    .sort((a, b) => b.bytes - a.bytes)
+}
+
+function templatesForRoots(
+  roots: Set<string>,
+  everyPageSections: Set<string>,
+  theme: ThemeStructure,
+): Set<string> {
+  const everyPage = [...roots].some(
+    (root) => root.startsWith('layout/') || everyPageSections.has(sectionType(root)),
+  )
+  if (everyPage) return new Set(theme.templates)
+
+  const templates = new Set<string>()
+  for (const root of roots) {
+    if (root.startsWith('templates/')) {
+      templates.add(root.slice('templates/'.length).replace(/\.liquid$/, ''))
+    }
+    for (const name of theme.sectionTemplates.get(sectionType(root)) ?? []) templates.add(name)
+  }
+  return templates
+}
+
+/** Section types present on every page: section groups plus {% section %} tags in layout/. */
+function collectEveryPageSections(files: LiquidFile[], theme: ThemeStructure): Set<string> {
+  const sections = new Set(theme.groupSections)
+  for (const file of files) {
+    if (!file.path.startsWith('layout/')) continue
+    for (const match of file.content.matchAll(SECTION_TAG_RE)) sections.add(match[1])
+  }
+  return sections
 }
 
 /**

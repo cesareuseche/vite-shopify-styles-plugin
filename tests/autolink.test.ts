@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  computeTemplateWeights,
   decideAutoLinks,
   readThemeStructure,
   type LiquidFile,
@@ -241,5 +242,81 @@ describe('readThemeStructure', () => {
     expect(structure.templates).toEqual([])
     expect(structure.sectionTemplates.size).toBe(0)
     expect(structure.groupSections.size).toBe(0)
+  })
+})
+
+describe('computeTemplateWeights', () => {
+  const sized = (aliasPath: string, bytes: number, link = false) => ({
+    ...entry(aliasPath, link),
+    bytes,
+  })
+
+  it('sums entry bytes onto the templates that place the rendering section', () => {
+    const files: LiquidFile[] = [
+      { path: 'sections/hero.liquid', content: render('sections/section.hero.css') },
+      { path: 'sections/faq.liquid', content: render('sections/section.faq.css') },
+    ]
+    const weights = computeTemplateWeights(
+      [sized('sections/section.hero.css', 3000), sized('sections/section.faq.css', 1000)],
+      files,
+      theme({
+        templates: ['index', 'product'],
+        sectionTemplates: new Map([
+          ['hero', ['index']],
+          ['faq', ['index', 'product']],
+        ]),
+      }),
+    )
+    expect(weights).toEqual([
+      { template: 'index', bytes: 4000 },
+      { template: 'product', bytes: 1000 },
+    ])
+  })
+
+  it('counts entries reachable from layout/ or section groups on every template', () => {
+    const files: LiquidFile[] = [
+      { path: 'layout/theme.liquid', content: render('snippets/l-base.css') },
+    ]
+    const weights = computeTemplateWeights(
+      [sized('snippets/l-base.css', 2000)],
+      files,
+      theme({ templates: ['index', 'product'] }),
+    )
+    expect(weights).toEqual([
+      { template: 'index', bytes: 2000 },
+      { template: 'product', bytes: 2000 },
+    ])
+  })
+
+  it('follows the render graph through snippets to the placing section', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      { path: 'sections/grid.liquid', content: "{% render 'card' %}" },
+    ]
+    const weights = computeTemplateWeights(
+      [sized('snippets/l-card.css', 500)],
+      files,
+      theme({ templates: ['index'], sectionTemplates: new Map([['grid', ['index']]]) }),
+    )
+    expect(weights).toEqual([{ template: 'index', bytes: 500 }])
+  })
+
+  it('excludes link entries and entries with unknown size', () => {
+    const files: LiquidFile[] = [
+      { path: 'layout/theme.liquid', content: render('snippets/l-a.css') + render('snippets/l-b.css') },
+    ]
+    const weights = computeTemplateWeights(
+      [sized('snippets/l-a.css', 2000, true), sized('snippets/l-b.css', 0)],
+      files,
+      theme({ templates: ['index'] }),
+    )
+    expect(weights).toEqual([{ template: 'index', bytes: 0 }])
+  })
+
+  it('returns [] for a theme without JSON templates', () => {
+    const files: LiquidFile[] = [
+      { path: 'layout/theme.liquid', content: render('snippets/l-a.css') },
+    ]
+    expect(computeTemplateWeights([sized('snippets/l-a.css', 100)], files, theme())).toEqual([])
   })
 })

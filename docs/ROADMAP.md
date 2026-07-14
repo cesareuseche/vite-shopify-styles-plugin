@@ -20,7 +20,7 @@ Plan: `docs/superpowers/plans/2026-07-03-inline-styles-plugin.md`
 | Configurable dev delegation target (instead of hardcoded `vite-tag`) | A consuming theme customizes vite-plugin-shopify's `snippetFile`. |
 | Per-call override (`inline: false` param on the render call) | `linkEntries` proves too coarse — same component used once-per-page in one template and in loops in another. |
 | Preload hints for `linkEntries` assets | Waterfalls show late CSS for a linked above-the-fold component (e.g. product-card grid). |
-| Size budgets that fail the build | Team wants CI to block CSS growth instead of warning. |
+| `templateBudget` that fails the build (strict mode) — the per-template report and warning shipped in Unreleased | Team wants CI to block CSS growth instead of warning. |
 | Bare path entries (`sections/foo.css` without `@/`/`~/`) | A consuming theme doesn't use the alias convention. |
 | Theme blocks CSS convention (`src/blocks/*.css`) | Lazer themes adopt Shopify theme blocks with their own CSS files (orphan scan already reads `blocks/`). |
 | `media` attribute support (breakpoint/print-scoped output) | A component genuinely ships conditional CSS. |

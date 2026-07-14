@@ -136,6 +136,79 @@ describe('closeBundle autoLinkEntries', () => {
   })
 })
 
+describe('closeBundle template weight report', () => {
+  function runBuild(opts: { templateBudget?: number }): { infos: string[]; warnings: string[] } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-weights-'))
+    const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-weights-theme-'))
+    const infos: string[] = []
+    const warnings: string[] = []
+
+    fs.mkdirSync(path.join(root, 'src/sections'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'src/sections/section.hero.css'), '.hero{display:flex}')
+    fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'assets/section.hero-X.css'), '.hero{display:flex}')
+    fs.writeFileSync(
+      path.join(root, 'assets/manifest.json'),
+      JSON.stringify({
+        'src/sections/section.hero.css': {
+          file: 'section.hero-X.css',
+          src: 'src/sections/section.hero.css',
+          isEntry: true,
+        },
+      }),
+    )
+    fs.mkdirSync(path.join(themeRoot, 'sections'), { recursive: true })
+    fs.writeFileSync(
+      path.join(themeRoot, 'sections/hero.liquid'),
+      "{% render 'vite-style', entry: '@/sections/section.hero.css' %}",
+    )
+    fs.mkdirSync(path.join(themeRoot, 'templates'), { recursive: true })
+    fs.writeFileSync(
+      path.join(themeRoot, 'templates/index.json'),
+      JSON.stringify({ sections: { main: { type: 'hero' } }, order: ['main'] }),
+    )
+    fs.writeFileSync(
+      path.join(themeRoot, 'templates/product.json'),
+      JSON.stringify({ sections: { main: { type: 'main-product' } }, order: ['main'] }),
+    )
+
+    const plugin = shopifyInlineStyles({ themeRoot, templateBudget: opts.templateBudget })
+    const configResolved = plugin.configResolved as (config: unknown) => void
+    const closeBundle = plugin.closeBundle as () => void
+
+    configResolved({
+      command: 'build',
+      root,
+      build: { outDir: 'assets', manifest: 'manifest.json' },
+      logger: {
+        info: (msg: string) => infos.push(msg),
+        warn: (msg: string) => warnings.push(msg),
+        error: () => {},
+      },
+    } as unknown as ResolvedConfig)
+
+    closeBundle()
+    return { infos, warnings }
+  }
+
+  it('prints per-template inline CSS totals', () => {
+    const { infos, warnings } = runBuild({})
+    const report = infos.find((msg) => msg.includes('inline CSS per template'))
+    expect(report).toBeDefined()
+    expect(report).toMatch(/index\s+0\.0 KB/)
+    expect(report).toMatch(/product\s+0\.0 KB/)
+    expect(warnings.filter((w) => w.includes('templateBudget'))).toEqual([])
+  })
+
+  it('warns for templates over templateBudget', () => {
+    const { warnings } = runBuild({ templateBudget: 10 })
+    const budgetWarnings = warnings.filter((w) => w.includes('templateBudget'))
+    expect(budgetWarnings).toHaveLength(1)
+    expect(budgetWarnings[0]).toContain("'index'")
+    expect(budgetWarnings[0]).toContain('linkEntries')
+  })
+})
+
 describe('closeBundle vendor import warning', () => {
   function runBuild(opts: {
     linkEntries?: string[]

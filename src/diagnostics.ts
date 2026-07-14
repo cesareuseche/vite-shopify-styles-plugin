@@ -1,3 +1,4 @@
+import type { TemplateWeight } from './autolink.js'
 import type { CssEntry } from './generate.js'
 
 export interface EntrySize extends CssEntry {
@@ -14,7 +15,14 @@ export function formatReport(entries: EntrySize[]): string {
   return ['[vite-style] generated snippet:', ...rows].join('\n')
 }
 
-function formatKb(bytes: number): string {
+export function formatTemplateReport(weights: TemplateWeight[]): string {
+  const rows = weights.map(
+    (weight) => `  ${weight.template.padEnd(44)} ${formatKb(weight.bytes).padStart(9)}`,
+  )
+  return ['[vite-style] inline CSS per template:', ...rows].join('\n')
+}
+
+export function formatKb(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`
 }
 

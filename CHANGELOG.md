@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+
+- Per-template inline CSS weight report: every build prints how many bytes of
+  inline CSS each JSON template ships in total, from the same render-graph
+  analysis as `autoLinkEntries`. New `templateBudget` option (bytes) warns when
+  a template exceeds it and suggests `linkEntries`.
+
 ## [0.4.0] - 2026-07-10
 
 ### Added

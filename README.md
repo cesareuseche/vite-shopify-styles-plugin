@@ -241,6 +241,7 @@ build report shows the part count for anything that was split.
 | --- | --- | --- |
 | `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for components rendered many times per page. |
 | `autoLinkEntries` | `false` | [Auto-promote entries to `<link>`](#automatic-linkentries-autolinkentries-true) when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Logged with reasons. |
+| `templateBudget` | — | Bytes of inline CSS a single template may ship before the build warns (e.g. `50_000`). The [per-template report](#build-diagnostics) always prints; the budget only adds warnings. |
 | `snippetName` | `'vite-style'` | Name of the generated snippet file. |
 | `themeRoot` | `'./'` | Theme root containing `snippets/`. Must match vite-plugin-shopify. |
 | `sourceCodeDir` | `'src'` | Directory the `@/` and `~/` aliases resolve against. Must match vite-plugin-shopify. |
@@ -257,9 +258,25 @@ for split entries — sorted by size:
   snippets/l-product-card.css                   3.8 KB  link
 ```
 
+It also prints how much inline CSS each JSON template ships in total — the bytes that
+re-download with every page view, which is the number to keep an eye on:
+
+```
+[vite-style] inline CSS per template:
+  product                                      34.2 KB
+  collection                                   21.0 KB
+  index                                        12.3 KB
+```
+
+The totals come from the same render-graph analysis as `autoLinkEntries`: an entry counts
+toward every template whose sections render it, and entries reachable from `layout/` or a
+section group count toward all templates. Set `templateBudget` (in bytes) to turn the report
+into a guardrail — any template over the budget gets a build warning suggesting `linkEntries`.
+
 It also warns when:
 
 - a CSS entrypoint is built but never referenced via `render 'vite-style'` in any Liquid file (orphan);
+- a template's total inline CSS exceeds [`templateBudget`](#options);
 - an oversized entry can't be auto-split (an atomic block alone exceeds the 15 KB cap) and falls back to `<link>`; or
 - an inline entry `@import`s vendor CSS (a bare specifier like `'swiper/css'`) — see
   [Vendor / UI-library CSS](#vendor--ui-library-css-swiper-etc).

@@ -9,6 +9,8 @@ export interface Options {
   themeRoot?: string
   /** Source dir that '@/' and '~/' aliases resolve against. Must match vite-plugin-shopify's sourceCodeDir. Default 'src'. */
   sourceCodeDir?: string
+  /** Warn when a template's total inline CSS exceeds this many bytes (e.g. 50_000). The per-template report always prints; this only adds warnings. Default: no warnings. */
+  templateBudget?: number
 }
 
 export interface ResolvedOptions {
@@ -17,6 +19,7 @@ export interface ResolvedOptions {
   snippetName: string
   themeRoot: string
   sourceCodeDir: string
+  templateBudget: number | undefined
 }
 
 export function normalizeOptions(options: Options = {}): ResolvedOptions {
@@ -26,5 +29,6 @@ export function normalizeOptions(options: Options = {}): ResolvedOptions {
     snippetName: options.snippetName ?? 'vite-style',
     themeRoot: options.themeRoot ?? './',
     sourceCodeDir: options.sourceCodeDir ?? 'src',
+    templateBudget: options.templateBudget,
   }
 }

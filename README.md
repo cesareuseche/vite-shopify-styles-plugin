@@ -40,11 +40,11 @@ HTML response**.
 - **Drop-in** — reuses your existing `vite-plugin-shopify` entrypoints and manifest; JS keeps using `vite-tag`.
 - **Zero config for the hard parts** — oversized CSS is [split automatically](#automatic-splitting-of-oversized-entries) to stay within Shopify's inline limit.
 
-**The trade-off:** inlined CSS isn't cached across page views (it re-ships with every page), and a
-component rendered many times on one page duplicates its CSS per render — Liquid's `{% render %}`
-is sandboxed, so there's no way to dedupe. For those components, keep a cached `<link>` with
-[`linkEntries`](#inline-vs-link-choosing-per-component). Inlining is a win for CSS that's small
-and rendered once or twice per page; it's a loss for large, repeated CSS.
+**The trade-off:** inlined CSS isn't cached across page views — it re-ships with every page.
+Within a page there's no duplication: the generated snippet emits each entry's tag **once per
+page**, no matter how many times a component renders (see [deduplication](#once-per-page-deduplication)).
+So the remaining call is cross-page caching: for large CSS reused on many page views, a cached
+`<link>` via [`linkEntries`](#inline-vs-link-choosing-per-component) beats re-shipping inline.
 
 ## Real-world results
 
@@ -92,8 +92,8 @@ export default {
       ],
     }),
     shopifyInlineStyles({
-      // Components rendered many times per page: keep a cached <link> instead of inlining.
-      linkEntries: ['l-button.css', 'l-product-card.css'],
+      // Large CSS reused across many pages: keep a cached <link> instead of inlining.
+      linkEntries: ['l-vendor-swiper.css'],
     }),
   ],
   build: { manifest: 'manifest.json' },
@@ -132,16 +132,43 @@ build. Its behavior differs by mode:
 
 JS entrypoints are untouched — they keep using `vite-tag`. This plugin only handles CSS.
 
+### Once-per-page deduplication
+
+Components usually render their own style right inside the snippet:
+
+```liquid
+{% comment %} snippets/l-product-card.liquid {% endcomment %}
+{% render 'vite-style', entry: '@/snippets/l-product-card.css' %}
+<l-product-card>…</l-product-card>
+```
+
+Render that card 24 times in a grid and `vite-style` runs 24 times — but the tag is emitted
+**only on the first render**. Liquid's `{% render %}` is sandboxed, so snippets can't share
+`assign`ed state, but `{% increment %}` counters *are* shared across render scopes. The
+generated snippet bumps a per-entry counter and only emits when it reads `0`:
+
+```liquid
+capture vs_seen
+  increment vite_style_once_3
+endcapture
+```
+
+This applies to inline `<style>` and `<link>` entries alike, with no configuration and no
+change to how you author components. The tag lands at the component's *first* render position,
+which always precedes the markup it styles. (Sections fetched later via the Section Rendering
+API — infinite scroll, filtering — are a fresh render context, so they re-include their styles
+and stay self-contained.)
+
 ## Inline vs. `<link>`: choosing per component
 
-Inlining is the right default, but not for every component. Use `linkEntries` to keep a classic
-cached `<link>` for CSS that would otherwise be duplicated or re-shipped:
+Inlining is the right default, but not for every component. Thanks to
+[once-per-page deduplication](#once-per-page-deduplication), how many times a component renders
+on one page doesn't matter — the choice is purely about **cross-page caching**:
 
 | Situation | Choose | Why |
 | --- | --- | --- |
-| Small CSS, rendered once or twice per page (badge, hero, banner) | **inline** (default) | Removes a render-blocking request from the critical path. |
-| Rendered many times per page (product card in a grid, button) | **`linkEntries`** | Inlining duplicates the CSS per `{% render %}`; a `<link>` ships it once and caches it. |
-| Large, shared CSS reused across many pages | **`linkEntries`** | A cached stylesheet beats re-shipping the same bytes on every page view. |
+| Small component CSS (badge, card, hero, banner) | **inline** (default) | Removes a render-blocking request from the critical path; ships once per page regardless of render count. |
+| Large, shared CSS reused across many pages | **`linkEntries`** | A cached stylesheet beats re-shipping the same bytes with every page view. |
 
 An entry in `linkEntries` is never inlined and never [split](#automatic-splitting-of-oversized-entries).
 
@@ -152,9 +179,8 @@ the plugin statically analyzes your theme — the Liquid render graph, `template
 section groups — and promotes an entry from inline to `<link>` when inlining loses:
 
 - **Rendered inside a loop** (`{% for %}` or `{% render 'card' for products %}`), directly or
-  via a snippet — the inline CSS would duplicate once per iteration.
-- **Reachable from two or more sections** — the CSS duplicates whenever they share a page, and
-  shared CSS is worth caching.
+  via a snippet — grid components appear on many page views, so their CSS is worth caching.
+- **Reachable from two or more sections** — shared CSS is worth caching.
 - **Present on every page** — rendered from `layout/`, from a section placed in a section group
   (header/footer), or via `{% section %}` in the layout. A cached stylesheet ships once per
   session instead of re-shipping inline with every page view.
@@ -164,7 +190,7 @@ section groups — and promotes an entry from inline to `<link>` when inlining l
 Every promotion is logged at build time with its reason, e.g.:
 
 ```
-[vite-style] auto-link: 'snippets/l-card.css' → <link rel="stylesheet"> (rendered inside a loop — inline CSS would duplicate per iteration)
+[vite-style] auto-link: 'snippets/l-card.css' → <link rel="stylesheet"> (rendered inside a loop — repeat-rendered component CSS is worth a cached <link>)
 ```
 
 Manual `linkEntries` still works and is never overridden — auto-analysis only promotes inline
@@ -200,9 +226,8 @@ Two rules keep this fast:
    (`swiper/css`) plus only the modules you use is often 3–6 KB. The biggest optimization is
    bytes you don't ship.
 2. **Don't `@import` vendor CSS inside a component's inline entry.** The vendor bytes get
-   bundled into that entry, re-ship with every page view, duplicate per `{% render %}`, and
-   usually push the entry over the 15 KB cap into auto-splitting. The build warns when it
-   detects this.
+   bundled into that entry, re-ship with every page view, and usually push the entry over the
+   15 KB cap into auto-splitting. The build warns when it detects this.
 
 ## Automatic splitting of oversized entries
 
@@ -239,7 +264,7 @@ build report shows the part count for anything that was split.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for components rendered many times per page. |
+| `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for large CSS reused across many pages. |
 | `autoLinkEntries` | `false` | [Auto-promote entries to `<link>`](#automatic-linkentries-autolinkentries-true) when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Logged with reasons. |
 | `templateBudget` | — | Bytes of inline CSS a single template may ship before the build warns (e.g. `50_000`). The [per-template report](#build-diagnostics) always prints; the budget only adds warnings. |
 | `snippetName` | `'vite-style'` | Name of the generated snippet file. |
@@ -290,7 +315,7 @@ A one-time find/replace on CSS entries only:
 → {% render 'vite-style', entry: '@/sections/section.foo.css' %}
 ```
 
-Then add any repeat-rendered components to `linkEntries`, and measure before/after with Lighthouse
+Then add any large cross-page CSS (vendor libraries, shared foundations) to `linkEntries`, and measure before/after with Lighthouse
 (or [unlighthouse](https://unlighthouse.dev)) on your home, collection, and product pages.
 
 ## FAQ

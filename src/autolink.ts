@@ -29,9 +29,10 @@ const SECTION_TAG_RE = /\{%-?\s*section\s+['"]([\w.-]+)['"]/g
 
 /**
  * Decides which inline entries should ship as a cached <link> instead, from static
- * analysis of the theme: entries whose CSS would duplicate on a page (rendered in a
- * loop, or reachable from 2+ sections) and entries on enough pages that caching beats
- * re-shipping inline with every view.
+ * analysis of the theme: repeat-rendered or widely shared entries (rendered in a loop,
+ * or reachable from 2+ sections) and entries on enough pages that caching beats
+ * re-shipping inline with every view. Intra-page duplication is already prevented by
+ * the snippet's once-per-page guard — these promotions are about cross-page caching.
  */
 export function decideAutoLinks(
   entries: CssEntry[],
@@ -56,7 +57,7 @@ function decide(
   everyPageSections: Set<string>,
   theme: ThemeStructure,
 ): string | null {
-  if (repeated) return 'rendered inside a loop — inline CSS would duplicate per iteration'
+  if (repeated) return 'rendered inside a loop — repeat-rendered component CSS is worth a cached <link>'
 
   const everyPage = [...roots].some(
     (root) => root.startsWith('layout/') || everyPageSections.has(sectionType(root)),
@@ -64,7 +65,7 @@ function decide(
   if (everyPage) return 'rendered on every page — a cached <link> ships once per session'
 
   if (roots.size >= 2) {
-    return `rendered from ${roots.size} sections — inline CSS duplicates when they share a page`
+    return `rendered from ${roots.size} sections — shared CSS is worth caching as a <link>`
   }
 
   const covered = new Set(
@@ -98,8 +99,8 @@ export function computeTemplateWeights(
   const everyPageSections = collectEveryPageSections(files, theme)
   const weights = new Map(theme.templates.map((template) => [template, 0]))
 
-  // ponytail: each entry counts once per template — a loop-repeated render actually ships
-  // N copies; weight per-render if the undercount misleads in practice.
+  // Each entry counts once per template — exact, since the generated snippet emits each
+  // entry's tag once per page regardless of how many times a component renders.
   for (const entry of entries) {
     if (entry.link || entry.bytes === 0) continue
     const { roots } = traceToRoots(entry, files, renderers)

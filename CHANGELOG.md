@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-14
+
 ### Added
 
 - Once-per-page deduplication: the generated snippet guards every entry with a

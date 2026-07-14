@@ -3,48 +3,53 @@
 [![npm](https://img.shields.io/npm/v/vite-plugin-shopify-inline-styles)](https://www.npmjs.com/package/vite-plugin-shopify-inline-styles)
 [![CI](https://github.com/cesareuseche/vite-shopify-styles-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/cesareuseche/vite-shopify-styles-plugin/actions/workflows/ci.yml)
 
-Ship each Shopify section/snippet's built CSS **inline in the HTML** instead of as a
-render-blocking `<link>` — using Shopify's server-side
-[`inline_asset_content`](https://shopify.dev/docs/api/liquid/filters/inline_asset_content)
-filter. A drop-in companion to [`vite-plugin-shopify`](https://github.com/barrel/shopify-vite):
-same entrypoints, same manifest, same dev workflow.
+Make your Shopify theme show up faster by shipping each component's CSS **inside the page's
+HTML** instead of as separate CSS files the browser has to download before it can paint.
+
+Built for themes that use [`vite-plugin-shopify`](https://github.com/barrel/shopify-vite) —
+same entrypoints, same manifest, same dev workflow. One line per component:
 
 ```liquid
 {% render 'vite-style', entry: '@/snippets/l-badge.css' %}
 ```
 
-That one line replaces a `<link>` with a minified `<style>` block emitted directly into the
-page — no extra request, no flash of unstyled content.
+That line prints the component's minified CSS straight into the page as a `<style>` tag.
+Nothing extra to download, no flash of unstyled content.
 
-## The problem
+## The problem, in plain words
 
-With per-component CSS, `vite-plugin-shopify` renders a `<link rel="stylesheet">` tag wherever
-the component is used — which means **inside the page body**. The browser can't see those tags
-until it has streamed down to them, then it opens a fresh CDN connection for each one and
-**blocks painting** until the round trip finishes. A product page with a dozen components pays
-this tax a dozen times, late, on the critical path.
+A component-based theme has one small CSS file per section and snippet. `vite-plugin-shopify`
+loads each one with a `<link rel="stylesheet">` tag wherever the component is used — in the
+middle of the page body.
+
+Every one of those tags is **render-blocking**: when the browser reaches it, it stops painting,
+opens a connection to Shopify's CDN, downloads the file, and only then continues. Worse, it
+can't prepare in advance — it discovers the tags one by one while reading down the page. A
+product page with a dozen components pays that price a dozen times, at the worst possible
+moment: right before the customer would see something.
 
 ## What this plugin does
 
-It moves that CSS into the HTML stream. On build, the generated `vite-style` snippet looks up
-each entry's hashed asset and emits its minified contents as an inline `<style>` tag via
-`inline_asset_content` — resolved on Shopify's servers, so the bytes arrive **with the first
-HTML response**.
-
-**Benefits:**
+At build time it generates one Liquid snippet — `snippets/vite-style.liquid` — that knows every
+CSS file your build produced. When Shopify renders a page, that snippet prints each component's
+CSS directly into the HTML (via Shopify's server-side
+[`inline_asset_content`](https://shopify.dev/docs/api/liquid/filters/inline_asset_content)
+filter), so the styles arrive **with the page itself** and there's nothing left to download.
 
 - **Zero extra requests** for inlined CSS — no per-component CDN round trips.
-- **No render-blocking `<link>`s** in the body, so first paint isn't gated on stylesheet fetches.
-- **No FOUC** — the styles are present before the markup they style.
-- **Faster FCP / LCP** on component-heavy pages (see below).
-- **Drop-in** — reuses your existing `vite-plugin-shopify` entrypoints and manifest; JS keeps using `vite-tag`.
-- **Zero config for the hard parts** — oversized CSS is [split automatically](#automatic-splitting-of-oversized-entries) to stay within Shopify's inline limit.
+- **Faster first paint** — no stylesheet downloads block rendering ([measured results below](#real-world-results)).
+- **No flash of unstyled content** — styles always land before the markup they style.
+- **Once per page, automatically** — a card rendered 24 times in a grid ships its CSS once
+  ([deduplication](#once-per-page-deduplication)).
+- **Handles Shopify's limits for you** — CSS over the 15 KB inline cap is
+  [split automatically](#automatic-splitting-of-oversized-entries).
+- **Dev mode untouched** — locally, CSS still loads from the Vite dev server with hot reload.
+  JS entrypoints keep using `vite-tag` everywhere.
 
-**The trade-off:** inlined CSS isn't cached across page views — it re-ships with every page.
-Within a page there's no duplication: the generated snippet emits each entry's tag **once per
-page**, no matter how many times a component renders (see [deduplication](#once-per-page-deduplication)).
-So the remaining call is cross-page caching: for large CSS reused on many page views, a cached
-`<link>` via [`linkEntries`](#inline-vs-link-choosing-per-component) beats re-shipping inline.
+**The one trade-off:** inline CSS isn't cached by the browser — it re-ships with every page
+view. That's a great deal for small component CSS and a bad one for big shared stylesheets,
+so those can stay as classic cached `<link>`s via
+[`linkEntries`](#inline-vs-link-choosing-per-component).
 
 ## Real-world results
 
@@ -68,16 +73,23 @@ Median of 3 desktop Lighthouse (v13, `--preset=desktop`) runs per page per theme
 two-thirds of stylesheet requests eliminated**, faster first paint on every page, and a
 six-point performance-score jump on the collection page — the page with the most components.
 
-## Install
+## Setup in 5 minutes
+
+You need a theme that already builds with
+[`vite-plugin-shopify`](https://github.com/barrel/shopify-vite) — this plugin plugs into its
+setup. (New to that? Set it up first, then come back.)
+
+### 1. Install
 
 ```bash
 npm i -D vite-plugin-shopify-inline-styles
 ```
 
-## Quick start
+### 2. Add it to `vite.config.js`
 
-In `vite.config.js`, add it after `vite-plugin-shopify` and expose your component CSS as
-additional entrypoints:
+Two things happen here: `additionalEntrypoints` tells Vite to build each component's CSS file
+as its own output (an "entry"), and `shopifyInlineStyles()` — added **after** the shopify
+plugin — generates the snippet that inlines them:
 
 ```js
 import shopify from 'vite-plugin-shopify'
@@ -87,24 +99,52 @@ export default {
   plugins: [
     shopify({
       additionalEntrypoints: [
-        'src/sections/section.*.css',
-        'src/snippets/*.css',
+        'src/sections/section.*.css', // each section's CSS
+        'src/snippets/*.css',         // each snippet's CSS
       ],
     }),
-    shopifyInlineStyles({
-      // Large CSS reused across many pages: keep a cached <link> instead of inlining.
-      linkEntries: ['l-vendor-swiper.css'],
-    }),
+    shopifyInlineStyles(),
   ],
   build: { manifest: 'manifest.json' },
 }
 ```
 
-Then, in any section or snippet, render the style for that entry:
+### 3. Render each component's style in Liquid
+
+Put this line wherever the component lives — the top of its own snippet is the usual spot.
+The `@/` prefix means "relative to your source dir" (`src/` by default):
 
 ```liquid
+{% comment %} snippets/l-badge.liquid {% endcomment %}
 {% render 'vite-style', entry: '@/snippets/l-badge.css' %}
+<span class="badge">…</span>
 ```
+
+Don't worry about a component rendering many times on a page — its CSS is emitted
+[only once](#once-per-page-deduplication).
+
+### 4. Build
+
+```bash
+npx vite build
+```
+
+The build log shows exactly what happened to every CSS file:
+
+```
+[vite-style] generated snippet:
+  sections/section.hero.css                     4.1 KB  inline
+  snippets/l-badge.css                          1.2 KB  inline
+[vite-style] inline CSS per template:
+  index                                         5.3 KB
+```
+
+### 5. Check it worked
+
+Open your store (or theme preview) and **view the page source**: each component now has a
+`<style data-vite-style="…">` block instead of a `<link rel="stylesheet">` tag. If you're
+looking at your **local dev server** instead, you'll still see the dev-server stylesheets —
+that's intentional; inlining only happens in production builds (see the [FAQ](#faq)).
 
 A complete, runnable setup lives in [`examples/basic`](examples/basic).
 
@@ -325,14 +365,37 @@ Then add any large cross-page CSS (vendor libraries, shared foundations) to `lin
 
 ## FAQ
 
+**Do I need `vite-plugin-shopify` for this to work?** Yes. This plugin reads the entrypoints
+and manifest that `vite-plugin-shopify` produces, and delegates to its `vite-tag` snippet in
+dev mode. It adds CSS inlining on top of that setup; it doesn't replace it.
+
+**I use a theme without Vite (e.g. stock Dawn) — can I use this?** Not directly. Your theme
+needs a Vite build with `vite-plugin-shopify` first. If you're curious what the end result
+looks like, Shopify's own [`inline_asset_content`](https://shopify.dev/docs/api/liquid/filters/inline_asset_content)
+filter is the underlying mechanism — this plugin automates it for a Vite build.
+
+**What exactly is an "entry"?** Every CSS file matched by your `additionalEntrypoints` globs
+becomes one entry: a separate build output you can reference by its source path, like
+`@/snippets/l-badge.css`. The [build report](#build-diagnostics) lists all of them.
+
 **I added `render 'vite-style'` but the CSS isn't inlined.** You're almost certainly looking at dev
 mode: there the snippet intentionally delegates to `vite-tag`, so CSS loads from the Vite dev server
 (keeping HMR working), and a startup log says so. Inline `<style>` tags exist only in the **built**
 theme — run a production build and inspect the generated `snippets/vite-style.liquid`.
 
+**What happens if I typo the entry name?** The page keeps working — the snippet renders an
+HTML comment (`<!-- vite-style: unknown entry ... -->`) instead of styles, so you can spot it
+in view-source. The build also [warns](#build-diagnostics) about built entries that are never
+rendered anywhere (the reverse mistake).
+
 **An entry shows up as `link` in the report but I didn't add it to `linkEntries`.** It was too large
 to inline and couldn't be safely split (see the [safety fallback](#automatic-splitting-of-oversized-entries)).
 The build warning names the entry and its size.
+
+**Which CSS should I *not* inline?** Big stylesheets reused on many pages — vendor/UI-library
+CSS like Swiper is the textbook case. Put those in [`linkEntries`](#inline-vs-link-choosing-per-component)
+so the browser downloads them once and caches them, or let
+[`autoLinkEntries`](#automatic-linkentries-autolinkentries-true) decide from your theme's structure.
 
 ## Limitations
 

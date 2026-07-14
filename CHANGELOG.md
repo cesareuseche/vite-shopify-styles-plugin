@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Fixed
+
+- `autoLinkEntries` false positives that promoted inline entries to `<link>` on
+  phantom repetition:
+  - The 0.7.0 "rendered 2+ times by one file" detection is removed — it counted
+    mutually exclusive `{% if %}/{% else %}` branches as repetition and poisoned
+    every render of the affected snippet. Repetition now means loops only
+    (`{% for %}` and `{% render 'x' for y %}`). A component genuinely rendered
+    twice statically ships its CSS twice inline again (0.4.0 behavior).
+  - Static analysis now strips `{% comment %}`, `{% raw %}`, `{% schema %}`,
+    `{% # … %}`, and HTML comments before matching, so commented-out renders,
+    alias mentions in comments, and `{% for %}` examples inside comments or
+    schema JSON no longer count as real renders or open loops.
+
 ## [0.7.0] - 2026-07-14
 
 ### Removed

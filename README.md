@@ -39,9 +39,9 @@ filter), so the styles arrive **with the page itself** and there's nothing left 
 - **Zero extra requests** for inlined CSS — no per-component CDN round trips.
 - **Faster first paint** — no stylesheet downloads block rendering ([measured results below](#real-world-results)).
 - **No flash of unstyled content** — styles always land before the markup they style.
-- **Repeat-rendered components handled** — a card rendered 24 times in a grid would duplicate
+- **Loop-rendered components handled** — a card rendered 24 times in a grid would duplicate
   its inline CSS 24×, so [`autoLinkEntries`](#automatic-linkentries-autolinkentries-true)
-  detects those and ships them as a single cached `<link>` instead.
+  detects loop renders and ships those entries as a single cached `<link>` instead.
 - **Handles Shopify's limits for you** — CSS over the 15 KB inline cap is
   [split automatically](#automatic-splitting-of-oversized-entries).
 - **Dev mode untouched** — locally, CSS still loads from the Vite dev server with hot reload.
@@ -196,8 +196,11 @@ already emitted the style.
 
 The fix is delivery mode, not dedupe: for repeat-rendered entries, a `<link>` tag repeated 24
 times costs ~150 bytes each and **one** cached download, while inline `<style>` repeats the
-full CSS every time. That's why `autoLinkEntries` promotes any entry rendered repeatedly on a
-page (in a loop, or several times by one file) to `<link>` — regardless of its size.
+full CSS every time. That's why `autoLinkEntries` promotes any entry rendered inside a loop
+to `<link>` — regardless of its size. Detection is loops only ({% for %} and
+`{% render 'card' for products %}`): static repeats can sit in mutually exclusive branches,
+so counting them produced false promotions. Analysis ignores `{% comment %}`, `{% raw %}`,
+`{% schema %}`, `{% # … %}`, and HTML comments.
 
 ## Inline vs. `<link>`: choosing per component
 
@@ -219,9 +222,8 @@ section groups — and promotes an entry from inline to `<link>` when inlining l
 
 An entry is promoted when it is:
 
-- **Rendered repeatedly on a page** — inside a loop (`{% for %}` or
-  `{% render 'card' for products %}`), or rendered two or more times by the same file,
-  directly or via a snippet. Inline CSS duplicates per render, so this promotion applies
+- **Rendered inside a loop** — `{% for %}` or `{% render 'card' for products %}`, directly
+  or via a snippet. Inline CSS duplicates per render, so this promotion applies
   **regardless of entry size**.
 - **Reachable from two or more sections** — shared CSS is worth caching.
 - **Present on every page** — rendered from `layout/`, from a section placed in a section group
@@ -314,7 +316,7 @@ build report shows the part count for anything that was split.
 | --- | --- | --- |
 | `linkEntries` | `[]` | Entries rendered as `<link>` instead of inline. Basename (`'l-button.css'`) or alias path (`'@/snippets/l-button.css'`). A basename matches every entry sharing it. Use for large CSS reused across many pages. |
 | `autoLinkEntries` | `false` | [Auto-promote entries to `<link>`](#automatic-linkentries-autolinkentries-true) when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Logged with reasons. |
-| `autoLinkMinBytes` | `3000` | Minimum built size for `autoLinkEntries`'s **caching-based** promotions (every page / shared / most templates). Repeat-rendered entries are promoted regardless of size — duplication multiplies the inline cost. |
+| `autoLinkMinBytes` | `3000` | Minimum built size for `autoLinkEntries`'s **caching-based** promotions (every page / shared / most templates). Loop-rendered entries are promoted regardless of size — duplication multiplies the inline cost. |
 | `templateBudget` | — | Bytes of inline CSS a single template may ship before the build warns (e.g. `50_000`). The [per-template report](#build-diagnostics) always prints; the budget only adds warnings. |
 | `snippetName` | `'vite-style'` | Name of the generated snippet file. |
 | `themeRoot` | `'./'` | Theme root containing `snippets/`. Must match vite-plugin-shopify. |

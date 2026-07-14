@@ -32,18 +32,21 @@ const SECTION_TAG_RE = /\{%-?\s*section\s+['"]([\w.-]+)['"]/g
  * analysis of the theme: repeat-rendered or widely shared entries (rendered in a loop,
  * or reachable from 2+ sections) and entries on enough pages that caching beats
  * re-shipping inline with every view. Intra-page duplication is already prevented by
- * the snippet's once-per-page guard — these promotions are about cross-page caching.
+ * the snippet's once-per-page guard — these promotions are about cross-page caching,
+ * so entries below minBytes are never promoted: under that size the render-blocking
+ * request always costs more than the re-shipped inline bytes.
  */
 export function decideAutoLinks(
-  entries: CssEntry[],
+  entries: Array<CssEntry & { bytes: number }>,
   files: LiquidFile[],
   theme: ThemeStructure,
+  minBytes = 0,
 ): AutoLinkDecision[] {
   const renderers = buildSnippetRenderers(files)
   const everyPageSections = collectEveryPageSections(files, theme)
 
   return entries.flatMap((entry) => {
-    if (entry.link) return []
+    if (entry.link || entry.bytes < minBytes) return []
     const { roots, repeated } = traceToRoots(entry, files, renderers)
     if (roots.size === 0) return []
     const reason = decide(roots, repeated, everyPageSections, theme)

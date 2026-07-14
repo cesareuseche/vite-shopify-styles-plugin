@@ -1,8 +1,13 @@
+/** Below ~3 KB, a render-blocking stylesheet request costs more than re-shipping the bytes inline with each page's HTML. */
+const DEFAULT_AUTO_LINK_MIN_BYTES = 3000
+
 export interface Options {
   /** Entries rendered as <link> instead of inline <style>. Basename ('l-button.css') or alias path ('@/snippets/l-button.css'). A basename matches every entry sharing it. */
   linkEntries?: string[]
   /** Auto-promote entries to <link> when build-time theme analysis says inlining loses: rendered in a loop, shared by 2+ sections, or present on most pages. Default false. */
   autoLinkEntries?: boolean
+  /** Minimum built size in bytes for autoLinkEntries to promote an entry. Below it, a render-blocking request costs more than the re-shipped inline bytes, so the entry stays inline. Default 3000. */
+  autoLinkMinBytes?: number
   /** Name of the generated snippet file (without .liquid). Default 'vite-style'. */
   snippetName?: string
   /** Theme root containing snippets/. Must match vite-plugin-shopify's themeRoot. Default './'. */
@@ -16,6 +21,7 @@ export interface Options {
 export interface ResolvedOptions {
   linkEntries: string[]
   autoLinkEntries: boolean
+  autoLinkMinBytes: number
   snippetName: string
   themeRoot: string
   sourceCodeDir: string
@@ -26,6 +32,7 @@ export function normalizeOptions(options: Options = {}): ResolvedOptions {
   return {
     linkEntries: options.linkEntries ?? [],
     autoLinkEntries: options.autoLinkEntries ?? false,
+    autoLinkMinBytes: options.autoLinkMinBytes ?? DEFAULT_AUTO_LINK_MIN_BYTES,
     snippetName: options.snippetName ?? 'vite-style',
     themeRoot: options.themeRoot ?? './',
     sourceCodeDir: options.sourceCodeDir ?? 'src',

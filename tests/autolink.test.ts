@@ -500,4 +500,30 @@ describe('decideAutoLinks: dead zones are ignored', () => {
     )
     expect(weights).toEqual([{ template: 'index', bytes: 0 }])
   })
+
+  it('a {% for %} inside {% raw %} does not mark a later render as looped', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/hero.liquid',
+        content: `{% raw %}{% for p in c %}example{% endfor %}{% endraw %}\n${render('snippets/l-hero.css')}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-hero.css')], files, theme())).toEqual([])
+  })
+
+  it('unclosed {% raw %} and {% schema %} blocks strip to end of file', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/hero.liquid',
+        content: `{% raw %} {% for p in c %}\n${render('snippets/l-hero.css')}`,
+      },
+      {
+        path: 'sections/other.liquid',
+        content: `{% schema %} {% for p in c %}\n${render('snippets/l-other.css')}`,
+      },
+    ]
+    expect(
+      decideAutoLinks([entry('snippets/l-hero.css'), entry('snippets/l-other.css')], files, theme()),
+    ).toEqual([])
+  })
 })

@@ -64,10 +64,6 @@ export function generateBuildSnippet(entries: CssEntry[]): string {
 `
   }
 
-  // No render-time dedupe is possible: Shopify's {% render %} sandbox isolates ALL
-  // state, including {% increment %} counters (each render starts its own counter at 0).
-  // Repeat-rendered entries must therefore ship as <link> — the browser dedupes the
-  // fetch — which autoLinkEntries handles regardless of entry size.
   const branches = entries
     .map((entry) => {
       const lines = [

@@ -1,20 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Logger, Plugin, ResolvedConfig } from 'vite'
-import {
-  computeTemplateWeights,
-  decideAutoLinks,
-  readThemeStructure,
-  type LiquidFile,
-} from './autolink.js'
-import {
-  findOrphans,
-  findVendorImports,
-  formatKb,
-  formatReport,
-  formatTemplateReport,
-  type EntrySize,
-} from './diagnostics.js'
+import { decideAutoLinks, readThemeStructure, type LiquidFile } from './autolink.js'
+import { findOrphans, findVendorImports, formatReport, type EntrySize } from './diagnostics.js'
 import {
   extractCssEntries,
   generateBuildSnippet,
@@ -64,14 +52,14 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
       const manifest = readManifest(config)
       const outDir = path.resolve(config.root, config.build.outDir)
       const liquidFiles = readLiquidFiles(options.themeRoot, snippetPath())
-      const theme = readThemeStructure(options.themeRoot)
 
-      let cssEntries: EntrySize[] = extractCssEntries(manifest, options).map((entry) => ({
-        ...entry,
-        bytes: statSizeSafe(path.join(outDir, entry.files[0])),
-      }))
+      let cssEntries = extractCssEntries(manifest, options)
       if (options.autoLinkEntries) {
-        const decisions = decideAutoLinks(cssEntries, liquidFiles, theme, options.autoLinkMinBytes)
+        const decisions = decideAutoLinks(
+          cssEntries,
+          liquidFiles,
+          readThemeStructure(options.themeRoot),
+        )
         const autoLinked = new Set(decisions.map((decision) => decision.aliasPath))
         cssEntries = cssEntries.map((entry) =>
           autoLinked.has(entry.aliasPath) ? { ...entry, link: true } : entry,
@@ -83,23 +71,16 @@ export default function shopifyInlineStyles(userOptions: Options = {}): Plugin {
         }
       }
 
-      const entries = cssEntries.map((entry) => autoSplit(entry, outDir, config.logger))
+      const entries = cssEntries.map((entry) => {
+        const sized: EntrySize = {
+          ...entry,
+          bytes: statSizeSafe(path.join(outDir, entry.files[0])),
+        }
+        return autoSplit(sized, outDir, config.logger)
+      })
 
       writeSnippet(snippetPath(), generateBuildSnippet(entries))
       config.logger.info(formatReport(entries))
-
-      const templateWeights = computeTemplateWeights(entries, liquidFiles, theme)
-      if (templateWeights.length > 0) {
-        config.logger.info(formatTemplateReport(templateWeights))
-        for (const weight of templateWeights) {
-          if (options.templateBudget === undefined || weight.bytes <= options.templateBudget) {
-            continue
-          }
-          config.logger.warn(
-            `[vite-style] template '${weight.template}' ships ${formatKb(weight.bytes)} of inline CSS, over the templateBudget of ${formatKb(options.templateBudget)} — move heavy entries to linkEntries`,
-          )
-        }
-      }
 
       const liquidContents = liquidFiles.map((file) => file.content)
       for (const orphan of findOrphans(entries, liquidContents)) {

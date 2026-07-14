@@ -100,12 +100,6 @@ describe('generateBuildSnippet', () => {
     expect(snippet).toContain("<!-- vite-style: unknown entry '{{ entry }}' -->")
   })
 
-  it('emits no dedupe guard — Shopify render sandboxes increment counters, so one cannot work', () => {
-    const snippet = generateBuildSnippet(entries)
-    expect(snippet).not.toContain('increment')
-    expect(snippet).not.toContain('vs_seen')
-  })
-
   it('preserves entry order (already sorted upstream) and is deterministic', () => {
     const first = generateBuildSnippet(entries)
     const second = generateBuildSnippet(entries)

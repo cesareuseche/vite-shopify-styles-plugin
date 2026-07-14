@@ -27,71 +27,48 @@ const RENDER_RE = /\{%-?\s*(?:render|include)\s+['"]([\w./-]+)['"]([^%]*?)-?%\}/
 const FOR_RE = /\{%-?\s*(for|endfor)\b/g
 const SECTION_TAG_RE = /\{%-?\s*section\s+['"]([\w.-]+)['"]/g
 
-// Dead zones: Liquid the runtime never executes and analysis must not see.
-// Unclosed blocks strip to end-of-file — conservative: analyzing less can only
-// suppress a promotion, never fabricate one.
-const DEAD_ZONE_RE = new RegExp(
-  [
-    '\\{%-?\\s*comment\\s*-?%\\}[\\s\\S]*?(?:\\{%-?\\s*endcomment\\s*-?%\\}|$)',
-    '\\{%-?\\s*raw\\s*-?%\\}[\\s\\S]*?(?:\\{%-?\\s*endraw\\s*-?%\\}|$)',
-    '\\{%-?\\s*schema\\s*-?%\\}[\\s\\S]*?(?:\\{%-?\\s*endschema\\s*-?%\\}|$)',
-    '\\{%-?\\s*#[\\s\\S]*?(?:%\\}|$)',
-    '<!--[\\s\\S]*?(?:-->|$)',
-  ].join('|'),
-  'g',
-)
-
-function stripDeadZones(files: LiquidFile[]): LiquidFile[] {
-  return files.map((file) => ({ ...file, content: file.content.replace(DEAD_ZONE_RE, '') }))
-}
-
 /**
  * Decides which inline entries should ship as a cached <link> instead, from static
- * analysis of the theme. Loop-rendered entries are always promoted: Liquid's {% render %}
- * sandbox makes intra-page dedupe impossible, so inline CSS duplicates per render while a
- * <link> is fetched once however many tags repeat. The minBytes gate applies only to the
- * caching heuristics (every page / shared sections / most templates), where the trade is
- * cached bytes vs one render-blocking request.
+ * analysis of the theme: entries whose CSS would duplicate on a page (rendered in a
+ * loop, or reachable from 2+ sections) and entries on enough pages that caching beats
+ * re-shipping inline with every view.
  */
 export function decideAutoLinks(
-  entries: Array<CssEntry & { bytes: number }>,
+  entries: CssEntry[],
   files: LiquidFile[],
   theme: ThemeStructure,
-  minBytes = 0,
 ): AutoLinkDecision[] {
-  const stripped = stripDeadZones(files)
-  const renderers = buildSnippetRenderers(stripped)
-  const everyPageSections = collectEveryPageSections(stripped, theme)
+  const renderers = buildSnippetRenderers(files)
+  const everyPageSections = new Set(theme.groupSections)
+  for (const file of files) {
+    if (!file.path.startsWith('layout/')) continue
+    for (const match of file.content.matchAll(SECTION_TAG_RE)) everyPageSections.add(match[1])
+  }
 
   return entries.flatMap((entry) => {
     if (entry.link) return []
-    const { roots, repeated } = traceToRoots(entry, stripped, renderers)
-    if (repeated) {
-      return [
-        {
-          aliasPath: entry.aliasPath,
-          reason: 'rendered repeatedly on a page — inline CSS would duplicate per render',
-        },
-      ]
-    }
-    if (roots.size === 0 || entry.bytes < minBytes) return []
-    const reason = decide(roots, everyPageSections, theme)
+    const { roots, repeated } = traceToRoots(entry, files, renderers)
+    if (roots.size === 0) return []
+    const reason = decide(roots, repeated, everyPageSections, theme)
     return reason ? [{ aliasPath: entry.aliasPath, reason }] : []
   })
 }
 
 function decide(
   roots: Set<string>,
+  repeated: boolean,
   everyPageSections: Set<string>,
   theme: ThemeStructure,
 ): string | null {
+  if (repeated) return 'rendered inside a loop — inline CSS would duplicate per iteration'
+
   const everyPage = [...roots].some(
     (root) => root.startsWith('layout/') || everyPageSections.has(sectionType(root)),
   )
   if (everyPage) return 'rendered on every page — a cached <link> ships once per session'
 
   if (roots.size >= 2) {
-    return `rendered from ${roots.size} sections — shared CSS is worth caching as a <link>`
+    return `rendered from ${roots.size} sections — inline CSS duplicates when they share a page`
   }
 
   const covered = new Set(
@@ -101,74 +78,6 @@ function decide(
     return `used on ${covered.size} of ${theme.templates.length} templates — a cached <link> beats re-shipping per view`
   }
   return null
-}
-
-export interface TemplateWeight {
-  /** JSON template name, e.g. 'product' */
-  template: string
-  /** Total bytes of inline CSS the template ships */
-  bytes: number
-}
-
-/**
- * Total inline CSS bytes each JSON template ships, from the same render-graph analysis
- * as decideAutoLinks. Entries reachable from layout/ or a section group count toward
- * every template. Sorted heaviest first.
- */
-export function computeTemplateWeights(
-  entries: Array<CssEntry & { bytes: number }>,
-  files: LiquidFile[],
-  theme: ThemeStructure,
-): TemplateWeight[] {
-  if (theme.templates.length === 0) return []
-  const stripped = stripDeadZones(files)
-  const renderers = buildSnippetRenderers(stripped)
-  const everyPageSections = collectEveryPageSections(stripped, theme)
-  const weights = new Map(theme.templates.map((template) => [template, 0]))
-
-  // ponytail: each entry counts once per template — a repeat-rendered inline entry
-  // actually ships N copies; weight per-render if the undercount misleads in practice.
-  for (const entry of entries) {
-    if (entry.link || entry.bytes === 0) continue
-    const { roots } = traceToRoots(entry, stripped, renderers)
-    for (const template of templatesForRoots(roots, everyPageSections, theme)) {
-      weights.set(template, (weights.get(template) ?? 0) + entry.bytes)
-    }
-  }
-
-  return [...weights]
-    .map(([template, bytes]) => ({ template, bytes }))
-    .sort((a, b) => b.bytes - a.bytes)
-}
-
-function templatesForRoots(
-  roots: Set<string>,
-  everyPageSections: Set<string>,
-  theme: ThemeStructure,
-): Set<string> {
-  const everyPage = [...roots].some(
-    (root) => root.startsWith('layout/') || everyPageSections.has(sectionType(root)),
-  )
-  if (everyPage) return new Set(theme.templates)
-
-  const templates = new Set<string>()
-  for (const root of roots) {
-    if (root.startsWith('templates/')) {
-      templates.add(root.slice('templates/'.length).replace(/\.liquid$/, ''))
-    }
-    for (const name of theme.sectionTemplates.get(sectionType(root)) ?? []) templates.add(name)
-  }
-  return templates
-}
-
-/** Section types present on every page: section groups plus {% section %} tags in layout/. */
-function collectEveryPageSections(files: LiquidFile[], theme: ThemeStructure): Set<string> {
-  const sections = new Set(theme.groupSections)
-  for (const file of files) {
-    if (!file.path.startsWith('layout/')) continue
-    for (const match of file.content.matchAll(SECTION_TAG_RE)) sections.add(match[1])
-  }
-  return sections
 }
 
 /**
@@ -216,7 +125,7 @@ interface Renderer {
   loop: boolean
 }
 
-/** snippet name -> files that {% render %} it, with a flag for loop renders */
+/** snippet name -> files that {% render %} it, with a flag for loop-repeated renders */
 function buildSnippetRenderers(files: LiquidFile[]): Map<string, Renderer[]> {
   const renderers = new Map<string, Renderer[]>()
   for (const file of files) {

@@ -79,22 +79,15 @@ describe('closeBundle', () => {
 })
 
 describe('closeBundle autoLinkEntries', () => {
-  // Above the 3 KB autoLinkMinBytes default, so the size gate lets the heuristics run.
-  const LARGE_CSS = '.card{display:flex}'.repeat(200)
-
-  function runBuild(opts: {
-    autoLinkEntries?: boolean
-    css?: string
-  }): { snippet: string; infos: string[] } {
-    const css = opts.css ?? LARGE_CSS
+  function runBuild(opts: { autoLinkEntries?: boolean }): { snippet: string; infos: string[] } {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-'))
     const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-theme-'))
     const infos: string[] = []
 
     fs.mkdirSync(path.join(root, 'src/snippets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'src/snippets/l-card.css'), css)
+    fs.writeFileSync(path.join(root, 'src/snippets/l-card.css'), '.card{display:flex}')
     fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'assets/l-card-X.css'), css)
+    fs.writeFileSync(path.join(root, 'assets/l-card-X.css'), '.card{display:flex}')
     fs.writeFileSync(
       path.join(root, 'assets/manifest.json'),
       JSON.stringify({
@@ -133,94 +126,13 @@ describe('closeBundle autoLinkEntries', () => {
     const autoLogs = infos.filter((msg) => msg.includes('auto-link'))
     expect(autoLogs).toHaveLength(1)
     expect(autoLogs[0]).toContain('snippets/l-card.css')
-    expect(autoLogs[0]).toContain('duplicate per render')
+    expect(autoLogs[0]).toContain('loop')
   })
 
   it('leaves the entry inline when the option is off (default)', () => {
     const { snippet, infos } = runBuild({})
     expect(snippet).not.toContain('assign vs_link = true')
     expect(infos.filter((msg) => msg.includes('auto-link'))).toEqual([])
-  })
-
-  it('promotes even a tiny loop-rendered entry — repetition bypasses the size gate', () => {
-    const { snippet, infos } = runBuild({ autoLinkEntries: true, css: '.card{display:flex}' })
-    expect(snippet).toContain('assign vs_link = true')
-    const autoLogs = infos.filter((msg) => msg.includes('auto-link'))
-    expect(autoLogs).toHaveLength(1)
-    expect(autoLogs[0]).toContain('duplicate per render')
-  })
-})
-
-describe('closeBundle template weight report', () => {
-  function runBuild(opts: { templateBudget?: number }): { infos: string[]; warnings: string[] } {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-weights-'))
-    const themeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-weights-theme-'))
-    const infos: string[] = []
-    const warnings: string[] = []
-
-    fs.mkdirSync(path.join(root, 'src/sections'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'src/sections/section.hero.css'), '.hero{display:flex}')
-    fs.mkdirSync(path.join(root, 'assets'), { recursive: true })
-    fs.writeFileSync(path.join(root, 'assets/section.hero-X.css'), '.hero{display:flex}')
-    fs.writeFileSync(
-      path.join(root, 'assets/manifest.json'),
-      JSON.stringify({
-        'src/sections/section.hero.css': {
-          file: 'section.hero-X.css',
-          src: 'src/sections/section.hero.css',
-          isEntry: true,
-        },
-      }),
-    )
-    fs.mkdirSync(path.join(themeRoot, 'sections'), { recursive: true })
-    fs.writeFileSync(
-      path.join(themeRoot, 'sections/hero.liquid'),
-      "{% render 'vite-style', entry: '@/sections/section.hero.css' %}",
-    )
-    fs.mkdirSync(path.join(themeRoot, 'templates'), { recursive: true })
-    fs.writeFileSync(
-      path.join(themeRoot, 'templates/index.json'),
-      JSON.stringify({ sections: { main: { type: 'hero' } }, order: ['main'] }),
-    )
-    fs.writeFileSync(
-      path.join(themeRoot, 'templates/product.json'),
-      JSON.stringify({ sections: { main: { type: 'main-product' } }, order: ['main'] }),
-    )
-
-    const plugin = shopifyInlineStyles({ themeRoot, templateBudget: opts.templateBudget })
-    const configResolved = plugin.configResolved as (config: unknown) => void
-    const closeBundle = plugin.closeBundle as () => void
-
-    configResolved({
-      command: 'build',
-      root,
-      build: { outDir: 'assets', manifest: 'manifest.json' },
-      logger: {
-        info: (msg: string) => infos.push(msg),
-        warn: (msg: string) => warnings.push(msg),
-        error: () => {},
-      },
-    } as unknown as ResolvedConfig)
-
-    closeBundle()
-    return { infos, warnings }
-  }
-
-  it('prints per-template inline CSS totals', () => {
-    const { infos, warnings } = runBuild({})
-    const report = infos.find((msg) => msg.includes('inline CSS per template'))
-    expect(report).toBeDefined()
-    expect(report).toMatch(/index\s+0\.0 KB/)
-    expect(report).toMatch(/product\s+0\.0 KB/)
-    expect(warnings.filter((w) => w.includes('templateBudget'))).toEqual([])
-  })
-
-  it('warns for templates over templateBudget', () => {
-    const { warnings } = runBuild({ templateBudget: 10 })
-    const budgetWarnings = warnings.filter((w) => w.includes('templateBudget'))
-    expect(budgetWarnings).toHaveLength(1)
-    expect(budgetWarnings[0]).toContain("'index'")
-    expect(budgetWarnings[0]).toContain('linkEntries')
   })
 })
 

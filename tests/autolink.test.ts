@@ -3,7 +3,6 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  computeTemplateWeights,
   decideAutoLinks,
   readThemeStructure,
   type LiquidFile,
@@ -11,13 +10,12 @@ import {
 } from '../src/autolink.js'
 import type { CssEntry } from '../src/generate.js'
 
-function entry(aliasPath: string, link = false): CssEntry & { bytes: number } {
+function entry(aliasPath: string, link = false): CssEntry {
   return {
     key: `src/${aliasPath}`,
     aliasPath,
     files: [path.posix.basename(aliasPath).replace('.css', '-X.css')],
     link,
-    bytes: 5000,
   }
 }
 
@@ -43,7 +41,7 @@ describe('decideAutoLinks: loop detection', () => {
     const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
     expect(decisions).toHaveLength(1)
     expect(decisions[0].aliasPath).toBe('snippets/l-card.css')
-    expect(decisions[0].reason).toContain('duplicate per render')
+    expect(decisions[0].reason).toContain('loop')
   })
 
   it('does not link an entry rendered after a closed loop', () => {
@@ -66,7 +64,7 @@ describe('decideAutoLinks: loop detection', () => {
     ]
     const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
     expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('duplicate per render')
+    expect(decisions[0].reason).toContain('loop')
   })
 
   it('links an entry whose snippet is rendered inside a loop elsewhere', () => {
@@ -79,7 +77,7 @@ describe('decideAutoLinks: loop detection', () => {
     ]
     const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
     expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('duplicate per render')
+    expect(decisions[0].reason).toContain('loop')
   })
 })
 
@@ -193,78 +191,6 @@ describe('decideAutoLinks: edges', () => {
   })
 })
 
-describe('decideAutoLinks: static repetition is not repetition (loops only)', () => {
-  it('leaves an entry rendered twice statically in the same file inline', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'sections/featured.liquid',
-        content: `${render('snippets/l-card.css')}\n${render('snippets/l-card.css')}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
-  })
-
-  it('leaves an entry whose snippet is rendered twice statically by the same file inline', () => {
-    const files: LiquidFile[] = [
-      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
-      {
-        path: 'sections/featured.liquid',
-        content: `{% render 'card', product: a %}\n{% render 'card', product: b %}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
-  })
-
-  it('does not flag a snippet rendered in both arms of an if/else', () => {
-    const files: LiquidFile[] = [
-      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
-      {
-        path: 'sections/featured.liquid',
-        content: `{% if compact %}{% render 'card', compact: true %}{% else %}{% render 'card' %}{% endif %}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
-  })
-
-  it('does not flag two different snippets rendered once each', () => {
-    const files: LiquidFile[] = [
-      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
-      {
-        path: 'sections/featured.liquid',
-        content: `{% render 'card' %}\n{% render 'other' %}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
-  })
-})
-
-describe('decideAutoLinks: size gate', () => {
-  const files: LiquidFile[] = [{ path: 'layout/theme.liquid', content: render('base.css') }]
-
-  it('never promotes a small entry via the caching heuristics', () => {
-    const small = { ...entry('base.css'), bytes: 2999 }
-    expect(decideAutoLinks([small], files, theme(), 3000)).toEqual([])
-  })
-
-  it('promotes an entry at or above minBytes', () => {
-    const big = { ...entry('base.css'), bytes: 3000 }
-    expect(decideAutoLinks([big], files, theme(), 3000)).toHaveLength(1)
-  })
-
-  it('repetition bypasses the gate — a tiny loop-rendered entry is still promoted', () => {
-    const loopFiles: LiquidFile[] = [
-      {
-        path: 'sections/grid.liquid',
-        content: `{% for p in c %}${render('snippets/l-card.css')}{% endfor %}`,
-      },
-    ]
-    const tiny = { ...entry('snippets/l-card.css'), bytes: 300 }
-    const decisions = decideAutoLinks([tiny], loopFiles, theme(), 3000)
-    expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('duplicate per render')
-  })
-})
-
 describe('readThemeStructure', () => {
   function makeTheme(files: Record<string, string>): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-style-autolink-'))
@@ -315,215 +241,5 @@ describe('readThemeStructure', () => {
     expect(structure.templates).toEqual([])
     expect(structure.sectionTemplates.size).toBe(0)
     expect(structure.groupSections.size).toBe(0)
-  })
-})
-
-describe('computeTemplateWeights', () => {
-  const sized = (aliasPath: string, bytes: number, link = false) => ({
-    ...entry(aliasPath, link),
-    bytes,
-  })
-
-  it('sums entry bytes onto the templates that place the rendering section', () => {
-    const files: LiquidFile[] = [
-      { path: 'sections/hero.liquid', content: render('sections/section.hero.css') },
-      { path: 'sections/faq.liquid', content: render('sections/section.faq.css') },
-    ]
-    const weights = computeTemplateWeights(
-      [sized('sections/section.hero.css', 3000), sized('sections/section.faq.css', 1000)],
-      files,
-      theme({
-        templates: ['index', 'product'],
-        sectionTemplates: new Map([
-          ['hero', ['index']],
-          ['faq', ['index', 'product']],
-        ]),
-      }),
-    )
-    expect(weights).toEqual([
-      { template: 'index', bytes: 4000 },
-      { template: 'product', bytes: 1000 },
-    ])
-  })
-
-  it('counts entries reachable from layout/ or section groups on every template', () => {
-    const files: LiquidFile[] = [
-      { path: 'layout/theme.liquid', content: render('snippets/l-base.css') },
-    ]
-    const weights = computeTemplateWeights(
-      [sized('snippets/l-base.css', 2000)],
-      files,
-      theme({ templates: ['index', 'product'] }),
-    )
-    expect(weights).toEqual([
-      { template: 'index', bytes: 2000 },
-      { template: 'product', bytes: 2000 },
-    ])
-  })
-
-  it('follows the render graph through snippets to the placing section', () => {
-    const files: LiquidFile[] = [
-      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
-      { path: 'sections/grid.liquid', content: "{% render 'card' %}" },
-    ]
-    const weights = computeTemplateWeights(
-      [sized('snippets/l-card.css', 500)],
-      files,
-      theme({ templates: ['index'], sectionTemplates: new Map([['grid', ['index']]]) }),
-    )
-    expect(weights).toEqual([{ template: 'index', bytes: 500 }])
-  })
-
-  it('excludes link entries and entries with unknown size', () => {
-    const files: LiquidFile[] = [
-      { path: 'layout/theme.liquid', content: render('snippets/l-a.css') + render('snippets/l-b.css') },
-    ]
-    const weights = computeTemplateWeights(
-      [sized('snippets/l-a.css', 2000, true), sized('snippets/l-b.css', 0)],
-      files,
-      theme({ templates: ['index'] }),
-    )
-    expect(weights).toEqual([{ template: 'index', bytes: 0 }])
-  })
-
-  it('returns [] for a theme without JSON templates', () => {
-    const files: LiquidFile[] = [
-      { path: 'layout/theme.liquid', content: render('snippets/l-a.css') },
-    ]
-    expect(computeTemplateWeights([sized('snippets/l-a.css', 100)], files, theme())).toEqual([])
-  })
-})
-
-describe('decideAutoLinks: dead zones are ignored', () => {
-  it('a {% for %} inside {% comment %} does not mark a later render as looped', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'sections/hero.liquid',
-        content: `{% comment %} example: {% for p in c %} {% endcomment %}\n${render('snippets/l-hero.css')}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-hero.css')], files, theme())).toEqual([])
-  })
-
-  it('a {% for %} inside {% schema %} does not mark a later render as looped', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'sections/hero.liquid',
-        content: `${render('snippets/l-hero.css')}\n{% schema %}\n{ "settings": [{ "info": "use {% for %} here" }] }\n{% endschema %}`,
-      },
-      {
-        path: 'sections/other.liquid',
-        content: `{% schema %} {% for %} {% endschema %}\n${render('snippets/l-hero.css')}`,
-      },
-    ]
-    const decisions = decideAutoLinks([entry('snippets/l-hero.css')], files, theme())
-    expect(decisions.map((d) => d.reason).join()).not.toContain('duplicate per render')
-  })
-
-  it('a commented-out loop render of a snippet does not promote its entry', () => {
-    const files: LiquidFile[] = [
-      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
-      {
-        path: 'sections/featured.liquid',
-        content: `{% comment %}{% render 'card' for collection.products %}{% endcomment %}\n{% render 'card' %}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
-  })
-
-  it('an alias mentioned in a layout {% comment %} does not create an every-page root', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'layout/theme.liquid',
-        content: `{% comment %} moved to section: @/snippets/l-badge.css {% endcomment %}`,
-      },
-      { path: 'sections/hero.liquid', content: render('snippets/l-badge.css') },
-    ]
-    const structure = theme({
-      templates: ['index', 'product', 'collection'],
-      sectionTemplates: new Map([['hero', ['index']]]),
-    })
-    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
-  })
-
-  it('an alias mentioned in an HTML comment is ignored', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'layout/theme.liquid',
-        content: `<!-- {% render 'vite-style', entry: '@/snippets/l-badge.css' %} -->`,
-      },
-      { path: 'sections/hero.liquid', content: render('snippets/l-badge.css') },
-    ]
-    const structure = theme({
-      templates: ['index', 'product', 'collection'],
-      sectionTemplates: new Map([['hero', ['index']]]),
-    })
-    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
-  })
-
-  it('an alias mentioned in a {% # %} inline comment is ignored', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'layout/theme.liquid',
-        content: `{% # style moved: @/snippets/l-badge.css %}`,
-      },
-      { path: 'sections/hero.liquid', content: render('snippets/l-badge.css') },
-    ]
-    const structure = theme({
-      templates: ['index', 'product', 'collection'],
-      sectionTemplates: new Map([['hero', ['index']]]),
-    })
-    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
-  })
-
-  it('an unclosed {% comment %} strips to end of file (conservative)', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'sections/hero.liquid',
-        content: `{% comment %} {% for p in c %} forgot to close\n${render('snippets/l-hero.css')}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-hero.css')], files, theme())).toEqual([])
-  })
-
-  it('computeTemplateWeights ignores dead zones too', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'layout/theme.liquid',
-        content: `{% comment %} ${render('snippets/l-a.css')} {% endcomment %}`,
-      },
-    ]
-    const weights = computeTemplateWeights(
-      [{ ...entry('snippets/l-a.css'), bytes: 2000 }],
-      files,
-      theme({ templates: ['index'] }),
-    )
-    expect(weights).toEqual([{ template: 'index', bytes: 0 }])
-  })
-
-  it('a {% for %} inside {% raw %} does not mark a later render as looped', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'sections/hero.liquid',
-        content: `{% raw %}{% for p in c %}example{% endfor %}{% endraw %}\n${render('snippets/l-hero.css')}`,
-      },
-    ]
-    expect(decideAutoLinks([entry('snippets/l-hero.css')], files, theme())).toEqual([])
-  })
-
-  it('unclosed {% raw %} and {% schema %} blocks strip to end of file', () => {
-    const files: LiquidFile[] = [
-      {
-        path: 'sections/hero.liquid',
-        content: `{% raw %} {% for p in c %}\n${render('snippets/l-hero.css')}`,
-      },
-      {
-        path: 'sections/other.liquid',
-        content: `{% schema %} {% for p in c %}\n${render('snippets/l-other.css')}`,
-      },
-    ]
-    expect(
-      decideAutoLinks([entry('snippets/l-hero.css'), entry('snippets/l-other.css')], files, theme()),
-    ).toEqual([])
   })
 })

@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-14
+
+### Changed
+
+- **Rolled back to the 0.4.0 feature set.** The 0.5.x–0.7.x additions
+  (once-per-page dedupe, per-template weight report/`templateBudget`,
+  `autoLinkMinBytes`, repetition-based `autoLinkEntries` promotion) did not
+  behave as documented and have been removed. 0.8.0 is functionally identical
+  to 0.4.0. Versions 0.5.0–0.7.1 are deprecated on npm.
+
 ## [0.7.1] - 2026-07-14
 
 ### Fixed

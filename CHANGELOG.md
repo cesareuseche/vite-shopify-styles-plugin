@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-14
+
 ### Added
 
 - `autoLinkMinBytes` option (default 3000): `autoLinkEntries` never promotes an
@@ -12,6 +14,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
   request costs more than re-shipping the bytes inline, so small entries stay
   inline no matter how widely they're used. Makes `autoLinkEntries: true` safe
   to enable by default.
+
+### Changed
+
+- README rewritten for newcomers: plain-English intro and problem statement, a
+  numbered 5-minute setup walkthrough with expected output, and beginner FAQ
+  entries. All technical reference content unchanged.
 
 ## [0.5.0] - 2026-07-14
 

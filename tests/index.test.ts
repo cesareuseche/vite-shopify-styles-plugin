@@ -133,7 +133,7 @@ describe('closeBundle autoLinkEntries', () => {
     const autoLogs = infos.filter((msg) => msg.includes('auto-link'))
     expect(autoLogs).toHaveLength(1)
     expect(autoLogs[0]).toContain('snippets/l-card.css')
-    expect(autoLogs[0]).toContain('loop')
+    expect(autoLogs[0]).toContain('duplicate per render')
   })
 
   it('leaves the entry inline when the option is off (default)', () => {
@@ -142,10 +142,12 @@ describe('closeBundle autoLinkEntries', () => {
     expect(infos.filter((msg) => msg.includes('auto-link'))).toEqual([])
   })
 
-  it('keeps a small loop-rendered entry inline (below the autoLinkMinBytes gate)', () => {
+  it('promotes even a tiny loop-rendered entry — repetition bypasses the size gate', () => {
     const { snippet, infos } = runBuild({ autoLinkEntries: true, css: '.card{display:flex}' })
-    expect(snippet).not.toContain('assign vs_link = true')
-    expect(infos.filter((msg) => msg.includes('auto-link'))).toEqual([])
+    expect(snippet).toContain('assign vs_link = true')
+    const autoLogs = infos.filter((msg) => msg.includes('auto-link'))
+    expect(autoLogs).toHaveLength(1)
+    expect(autoLogs[0]).toContain('duplicate per render')
   })
 })
 

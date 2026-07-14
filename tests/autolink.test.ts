@@ -393,3 +393,111 @@ describe('computeTemplateWeights', () => {
     expect(computeTemplateWeights([sized('snippets/l-a.css', 100)], files, theme())).toEqual([])
   })
 })
+
+describe('decideAutoLinks: dead zones are ignored', () => {
+  it('a {% for %} inside {% comment %} does not mark a later render as looped', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/hero.liquid',
+        content: `{% comment %} example: {% for p in c %} {% endcomment %}\n${render('snippets/l-hero.css')}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-hero.css')], files, theme())).toEqual([])
+  })
+
+  it('a {% for %} inside {% schema %} does not mark a later render as looped', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/hero.liquid',
+        content: `${render('snippets/l-hero.css')}\n{% schema %}\n{ "settings": [{ "info": "use {% for %} here" }] }\n{% endschema %}`,
+      },
+      {
+        path: 'sections/other.liquid',
+        content: `{% schema %} {% for %} {% endschema %}\n${render('snippets/l-hero.css')}`,
+      },
+    ]
+    const decisions = decideAutoLinks([entry('snippets/l-hero.css')], files, theme())
+    expect(decisions.map((d) => d.reason).join()).not.toContain('duplicate per render')
+  })
+
+  it('a commented-out loop render of a snippet does not promote its entry', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      {
+        path: 'sections/featured.liquid',
+        content: `{% comment %}{% render 'card' for collection.products %}{% endcomment %}\n{% render 'card' %}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
+  })
+
+  it('an alias mentioned in a layout {% comment %} does not create an every-page root', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'layout/theme.liquid',
+        content: `{% comment %} moved to section: @/snippets/l-badge.css {% endcomment %}`,
+      },
+      { path: 'sections/hero.liquid', content: render('snippets/l-badge.css') },
+    ]
+    const structure = theme({
+      templates: ['index', 'product', 'collection'],
+      sectionTemplates: new Map([['hero', ['index']]]),
+    })
+    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
+  })
+
+  it('an alias mentioned in an HTML comment is ignored', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'layout/theme.liquid',
+        content: `<!-- {% render 'vite-style', entry: '@/snippets/l-badge.css' %} -->`,
+      },
+      { path: 'sections/hero.liquid', content: render('snippets/l-badge.css') },
+    ]
+    const structure = theme({
+      templates: ['index', 'product', 'collection'],
+      sectionTemplates: new Map([['hero', ['index']]]),
+    })
+    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
+  })
+
+  it('an alias mentioned in a {% # %} inline comment is ignored', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'layout/theme.liquid',
+        content: `{% # style moved: @/snippets/l-badge.css %}`,
+      },
+      { path: 'sections/hero.liquid', content: render('snippets/l-badge.css') },
+    ]
+    const structure = theme({
+      templates: ['index', 'product', 'collection'],
+      sectionTemplates: new Map([['hero', ['index']]]),
+    })
+    expect(decideAutoLinks([entry('snippets/l-badge.css')], files, structure)).toEqual([])
+  })
+
+  it('an unclosed {% comment %} strips to end of file (conservative)', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'sections/hero.liquid',
+        content: `{% comment %} {% for p in c %} forgot to close\n${render('snippets/l-hero.css')}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-hero.css')], files, theme())).toEqual([])
+  })
+
+  it('computeTemplateWeights ignores dead zones too', () => {
+    const files: LiquidFile[] = [
+      {
+        path: 'layout/theme.liquid',
+        content: `{% comment %} ${render('snippets/l-a.css')} {% endcomment %}`,
+      },
+    ]
+    const weights = computeTemplateWeights(
+      [{ ...entry('snippets/l-a.css'), bytes: 2000 }],
+      files,
+      theme({ templates: ['index'] }),
+    )
+    expect(weights).toEqual([{ template: 'index', bytes: 0 }])
+  })
+})

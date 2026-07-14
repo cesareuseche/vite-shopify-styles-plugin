@@ -27,6 +27,24 @@ const RENDER_RE = /\{%-?\s*(?:render|include)\s+['"]([\w./-]+)['"]([^%]*?)-?%\}/
 const FOR_RE = /\{%-?\s*(for|endfor)\b/g
 const SECTION_TAG_RE = /\{%-?\s*section\s+['"]([\w.-]+)['"]/g
 
+// Dead zones: Liquid the runtime never executes and analysis must not see.
+// Unclosed blocks strip to end-of-file — conservative: analyzing less can only
+// suppress a promotion, never fabricate one.
+const DEAD_ZONE_RE = new RegExp(
+  [
+    '\\{%-?\\s*comment\\s*-?%\\}[\\s\\S]*?(?:\\{%-?\\s*endcomment\\s*-?%\\}|$)',
+    '\\{%-?\\s*raw\\s*-?%\\}[\\s\\S]*?(?:\\{%-?\\s*endraw\\s*-?%\\}|$)',
+    '\\{%-?\\s*schema\\s*-?%\\}[\\s\\S]*?(?:\\{%-?\\s*endschema\\s*-?%\\}|$)',
+    '\\{%-?\\s*#[\\s\\S]*?(?:%\\}|$)',
+    '<!--[\\s\\S]*?(?:-->|$)',
+  ].join('|'),
+  'g',
+)
+
+function stripDeadZones(files: LiquidFile[]): LiquidFile[] {
+  return files.map((file) => ({ ...file, content: file.content.replace(DEAD_ZONE_RE, '') }))
+}
+
 /**
  * Decides which inline entries should ship as a cached <link> instead, from static
  * analysis of the theme. Loop-rendered entries are always promoted: Liquid's {% render %}
@@ -41,12 +59,13 @@ export function decideAutoLinks(
   theme: ThemeStructure,
   minBytes = 0,
 ): AutoLinkDecision[] {
-  const renderers = buildSnippetRenderers(files)
-  const everyPageSections = collectEveryPageSections(files, theme)
+  const stripped = stripDeadZones(files)
+  const renderers = buildSnippetRenderers(stripped)
+  const everyPageSections = collectEveryPageSections(stripped, theme)
 
   return entries.flatMap((entry) => {
     if (entry.link) return []
-    const { roots, repeated } = traceToRoots(entry, files, renderers)
+    const { roots, repeated } = traceToRoots(entry, stripped, renderers)
     if (repeated) {
       return [
         {
@@ -102,15 +121,16 @@ export function computeTemplateWeights(
   theme: ThemeStructure,
 ): TemplateWeight[] {
   if (theme.templates.length === 0) return []
-  const renderers = buildSnippetRenderers(files)
-  const everyPageSections = collectEveryPageSections(files, theme)
+  const stripped = stripDeadZones(files)
+  const renderers = buildSnippetRenderers(stripped)
+  const everyPageSections = collectEveryPageSections(stripped, theme)
   const weights = new Map(theme.templates.map((template) => [template, 0]))
 
   // ponytail: each entry counts once per template — a repeat-rendered inline entry
   // actually ships N copies; weight per-render if the undercount misleads in practice.
   for (const entry of entries) {
     if (entry.link || entry.bytes === 0) continue
-    const { roots } = traceToRoots(entry, files, renderers)
+    const { roots } = traceToRoots(entry, stripped, renderers)
     for (const template of templatesForRoots(roots, everyPageSections, theme)) {
       weights.set(template, (weights.get(template) ?? 0) + entry.bytes)
     }

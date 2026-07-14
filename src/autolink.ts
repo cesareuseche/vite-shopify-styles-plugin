@@ -29,12 +29,11 @@ const SECTION_TAG_RE = /\{%-?\s*section\s+['"]([\w.-]+)['"]/g
 
 /**
  * Decides which inline entries should ship as a cached <link> instead, from static
- * analysis of the theme. Repeat-rendered entries (in a loop, or rendered several times
- * by one file) are always promoted: Liquid's {% render %} sandbox makes intra-page
- * dedupe impossible, so inline CSS duplicates per render while a <link> is fetched once
- * however many tags repeat. The minBytes gate applies only to the caching heuristics
- * (every page / shared sections / most templates), where the trade is cached bytes vs
- * one render-blocking request.
+ * analysis of the theme. Loop-rendered entries are always promoted: Liquid's {% render %}
+ * sandbox makes intra-page dedupe impossible, so inline CSS duplicates per render while a
+ * <link> is fetched once however many tags repeat. The minBytes gate applies only to the
+ * caching heuristics (every page / shared sections / most templates), where the trade is
+ * cached bytes vs one render-blocking request.
  */
 export function decideAutoLinks(
   entries: Array<CssEntry & { bytes: number }>,
@@ -179,10 +178,7 @@ function traceToRoots(
   }
 
   for (const file of files) {
-    const occurrences = aliasOccurrences(file.content, entry.aliasPath)
-    // The same entry rendered 2+ times in one file duplicates without any loop.
-    repeated ||= occurrences.length > 1
-    for (const index of occurrences) {
+    for (const index of aliasOccurrences(file.content, entry.aliasPath)) {
       enqueue(file.path, insideForLoop(file.content, index))
     }
   }
@@ -200,18 +196,12 @@ interface Renderer {
   loop: boolean
 }
 
-/** snippet name -> files that {% render %} it, with a flag for repeated renders (loop or 2+ static renders in one file) */
+/** snippet name -> files that {% render %} it, with a flag for loop renders */
 function buildSnippetRenderers(files: LiquidFile[]): Map<string, Renderer[]> {
   const renderers = new Map<string, Renderer[]>()
   for (const file of files) {
-    const matches = [...file.content.matchAll(RENDER_RE)]
-    const counts = new Map<string, number>()
-    for (const match of matches) counts.set(match[1], (counts.get(match[1]) ?? 0) + 1)
-    for (const match of matches) {
-      const loop =
-        /^\s+for\s/.test(match[2]) ||
-        insideForLoop(file.content, match.index) ||
-        (counts.get(match[1]) ?? 0) > 1
+    for (const match of file.content.matchAll(RENDER_RE)) {
+      const loop = /^\s+for\s/.test(match[2]) || insideForLoop(file.content, match.index)
       const existing = renderers.get(match[1]) ?? []
       renderers.set(match[1], [...existing, { path: file.path, loop }])
     }

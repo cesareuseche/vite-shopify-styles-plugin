@@ -193,20 +193,18 @@ describe('decideAutoLinks: edges', () => {
   })
 })
 
-describe('decideAutoLinks: static repetition (no loop)', () => {
-  it('links an entry rendered twice in the same file', () => {
+describe('decideAutoLinks: static repetition is not repetition (loops only)', () => {
+  it('leaves an entry rendered twice statically in the same file inline', () => {
     const files: LiquidFile[] = [
       {
         path: 'sections/featured.liquid',
         content: `${render('snippets/l-card.css')}\n${render('snippets/l-card.css')}`,
       },
     ]
-    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
-    expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('duplicate per render')
+    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
   })
 
-  it('links an entry whose snippet is rendered twice by the same file', () => {
+  it('leaves an entry whose snippet is rendered twice statically by the same file inline', () => {
     const files: LiquidFile[] = [
       { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
       {
@@ -214,9 +212,18 @@ describe('decideAutoLinks: static repetition (no loop)', () => {
         content: `{% render 'card', product: a %}\n{% render 'card', product: b %}`,
       },
     ]
-    const decisions = decideAutoLinks([entry('snippets/l-card.css')], files, theme())
-    expect(decisions).toHaveLength(1)
-    expect(decisions[0].reason).toContain('duplicate per render')
+    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
+  })
+
+  it('does not flag a snippet rendered in both arms of an if/else', () => {
+    const files: LiquidFile[] = [
+      { path: 'snippets/card.liquid', content: render('snippets/l-card.css') },
+      {
+        path: 'sections/featured.liquid',
+        content: `{% if compact %}{% render 'card', compact: true %}{% else %}{% render 'card' %}{% endif %}`,
+      },
+    ]
+    expect(decideAutoLinks([entry('snippets/l-card.css')], files, theme())).toEqual([])
   })
 
   it('does not flag two different snippets rendered once each', () => {

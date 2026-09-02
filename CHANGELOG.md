@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code plugin files (`.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json`)
+  and the `vite-shopify-inline-styles` skill under `skills/`. The README's
+  `/plugin marketplace add` and `/plugin install` instructions previously pointed at files
+  that did not exist, so the install failed with "Marketplace file not found".
+
 ## [0.8.0] - 2026-07-14
 
 ### Changed

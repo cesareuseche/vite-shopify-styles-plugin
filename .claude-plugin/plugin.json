@@ -1,0 +1,14 @@
+{
+  "name": "vite-shopify-inline-styles",
+  "displayName": "Vite Shopify Inline Styles",
+  "version": "0.8.0",
+  "description": "Skill for configuring and troubleshooting vite-plugin-shopify-inline-styles: inline Shopify section/snippet CSS via inline_asset_content, choose inline vs <link> per component, and read build diagnostics.",
+  "author": {
+    "name": "Cesar Useche",
+    "url": "https://github.com/cesareuseche"
+  },
+  "homepage": "https://github.com/cesareuseche/vite-shopify-styles-plugin",
+  "repository": "https://github.com/cesareuseche/vite-shopify-styles-plugin",
+  "license": "MIT",
+  "keywords": ["vite", "shopify", "shopify-theme", "css", "inline-styles", "liquid"]
+}
